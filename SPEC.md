@@ -31,7 +31,7 @@ Three design decisions follow from that:
    emailing on every minor label/comment change, email fires only on major status transitions (§4.2); the
    permanent link is the authoritative place to see full history at any time.
 
-Staff-side design: GitHub org roles (Read/Triage/Admin), an OAuth relay Worker for the token exchange, labels
+Staff-side design: GitHub org roles (Read/Triage/Admin), device-flow login through a thin Worker proxy (§2.2), labels
 for location/category/priority/status, assignee for the responsible technician, comments for resolution
 notes, and an optional Projects v2 board for a Kanban-style view. Staff call `api.github.com` directly with
 `octokit.js`. This is not repeated below except where reporter-side flows touch it.
@@ -45,7 +45,7 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
 ```
 ┌──────────────────────┐  ┌───────────────────────┐  ┌──────────────────────────┐
 │  PUBLIC SUBMISSION     │  │    STATUS PAGE          │  │      STAFF DASHBOARD      │
-│  (reporters, no login) │  │  (unguessable link,     │  │  (GitHub OAuth, org role) │
+│  (reporters, no login) │  │  (unguessable link,     │  │  (GitHub login, org role) │
 │                       │  │   no login)             │  │                          │
 │  email → OTP →        │  │  read-only issue view   │  │  octokit.js → api.github │
 │  report form →        │  │  + history              │  │  .com directly (Read/    │
@@ -75,14 +75,58 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
    └─────────────────────────┘
 ```
 
-**Platform choice:** consolidate everything on **Cloudflare Workers + Workers KV**. Cloudflare Workers is
-the precedent for the OAuth relay (utterances runs its relay as a Worker); adding KV keeps the whole backend
-on one platform instead of splitting across providers.
+**Platform choice:** consolidate everything on **Cloudflare Workers + Workers KV**, and serve the static SPA
+from the same platform (Workers static assets or Pages) so the SPA and the Worker share one origin. Adding KV
+keeps the whole backend on one platform instead of splitting across providers.
 
-**Why a relay at all:** `api.github.com` allows CORS, so staff operations can run client-side once a token
-exists. But GitHub's token-exchange endpoint requires `client_secret` (PKCE, added July 2025, doesn't remove
-that), and the device-flow endpoints don't support CORS, so the exchange can't happen in the browser.
-giscus and utterances use the same small-relay pattern.
+**Why a proxy at all:** `api.github.com` allows CORS, so staff operations can run client-side once a token
+exists. But GitHub's device-flow endpoints (`/login/device/code`, `/login/oauth/access_token`) don't support
+CORS preflight, so a browser can't call them directly. The Worker proxies exactly those endpoints (plus token
+refresh, if a GitHub App is used). Device flow needs no `client_secret` and no redirect URI, so the Worker
+holds no OAuth secret, and because the SPA and the Worker share an origin the proxy needs no CORS headers.
+
+The classic web flow was rejected: its token exchange requires `client_secret` (PKCE, added July 2025,
+doesn't remove that), so it would still need a relay, and in the Electron shell (§2.1) it would run inside an
+embedded window where GitHub 2FA and passkeys are unreliable (RFC 8252 §8.12 also says native apps must not
+use embedded user agents for authorization).
+
+### 2.1 Delivery format: Electron shell around the hosted SPA
+
+The original brief asks for a desktop application ("asztali alkalmazás"), and a web-only deliverable isn't
+acceptable. The design therefore ships **one SPA containing all three surfaces**, hosted on Cloudflare, plus a
+thin **Windows-only Electron shell** that opens it.
+
+- **Same build, two ways to run it.** The shell and the plain website serve the identical SPA. The SPA
+  contains no shell-specific code, so the shell stays a pure wrapper.
+- **Remote-URL shell.** A small `main.js` calls `loadURL` on the hosted SPA. No preload script and no native
+  APIs are exposed to the page; Electron's secure defaults stay on (`contextIsolation`, sandbox, no
+  `nodeIntegration`), HTTPS only. The page's origin is the hosted site's, so the Worker needs no extra CORS
+  entry for the shell.
+- **Navigation rule.** `target="_blank"` links and `window.open` go to the system browser
+  (`setWindowOpenHandler` → `shell.openExternal`); in-window navigation stays in the shell. The SPA renders
+  status links with `target="_blank"`. Any `will-navigate` restriction only needs to allow the app's own
+  origin, since login (§2.2) happens in the system browser.
+- **Status pages stay in the browser.** Reporters reach them through the emailed link or the link on the
+  post-submit confirmation page, opened in the system browser. The shell has no status-lookup entry point and
+  no local "My reports" list.
+- **Packaging.** An unsigned Windows build from electron-builder or Electron Forge; Windows only, and the
+  SmartScreen click-through is accepted. `npm start` remains the dev loop.
+- **Dependency.** The shell needs the hosted site to be live. That adds no new network dependency, since
+  GitHub, the Worker, and Resend are all online anyway.
+
+### 2.2 Staff login (device flow)
+
+1. The SPA calls the Worker's device-code endpoint, which forwards to GitHub and returns `user_code`,
+   `verification_uri`, `device_code`, and `interval`.
+2. The SPA shows the `user_code` and a `target="_blank"` link to `verification_uri`. In the shell that opens
+   the system browser, where the staff member is usually already signed in to GitHub; passkeys, 2FA, and
+   hardware keys work there.
+3. The SPA polls the Worker's token endpoint at the returned interval (honouring `slow_down`) until the staff
+   member approves; the device code expires after 900 seconds.
+4. The SPA then calls `api.github.com` directly with the token, and uses the same token to authenticate to the
+   reveal-contact function (§4.4).
+
+Device flow must be enabled on the GitHub app. This flow has not yet been verified end to end (§7 item 13).
 
 ---
 
@@ -214,9 +258,9 @@ decision (see privacy note below).
 ### 3.4 Bottom line
 
 The OTP-gated reporter flow is feasible end to end on a lightweight-serverless design. It is **not**
-backend-free — the OAuth relay already rules that out (§2) — but it doesn't need a "real" server either:
+backend-free — the staff-login proxy already rules that out (§2) — but it doesn't need a "real" server either:
 Cloudflare Workers + Workers KV covers every requirement (OTP issuance/verification, bot-authored issue
-creation, webhook-driven notification email, the OAuth relay). The architecture holds **actual persistent
+creation, webhook-driven notification email, the staff device-flow proxy). The architecture holds **actual persistent
 state** (KV), which is worth naming explicitly rather than calling the design "serverless" in the stronger
 sense some readers assume that word means.
 
@@ -304,8 +348,8 @@ actually run into a case where they want a private back-channel on a specific re
 
 Because the reporter's email lives only in KV, staff who need to contact a reporter directly (e.g. to schedule
 building access), or who need to resend a lost status link, can't get either from the issue itself. A small
-**reveal-contact** function, gated by checking the caller's GitHub org role (reusing the existing OAuth relay's
-token), looks up the email and/or status link from KV and returns it. This keeps both lookups auditable/
+**reveal-contact** function, gated by checking the caller's GitHub org role (using the staff member's own GitHub token
+from device-flow login, §2.2), looks up the email and/or status link from KV and returns it. This keeps both lookups auditable/
 controllable in one place instead of that data being plastered across every issue view.
 
 ---
@@ -336,6 +380,7 @@ staff-facing admin UI for managing it is a plausible future enhancement, not req
 | Repair progress trackable; completed-work info recorded            | Open/closed + `status:*` labels (or a Projects v2 board with a single-select "Status" field); resolution notes as issue comments. Major transitions are mirrored out via email to the reporter.                                                                                                           |
 | Multiple roles with different permissions                          | Reporter is "anyone on the allowlist who completes OTP" (not a GitHub role). Maintenance staff = org Triage; system admin = org Admin (can manage members; onboarding is an org invite, automatable via the membership API).                                                                              |
 | Search / overview by open, in progress, closed                     | GitHub search qualifiers and label filters in the staff dashboard; optionally Projects board columns.                                                                                                                                                                                                     |
+| Desktop application (the brief's first sentence)                   | A thin Windows-only Electron shell around the hosted SPA, which also runs as a plain website (§2.1).                                                                                                                                                                                                      |
 
 This gives every reporter both a self-service pull view (the permanent link) _and_ proactive push
 notifications on major changes, without granting them the broad repo visibility a GitHub Read role would.
@@ -359,9 +404,9 @@ notifications on major changes, without granting them the broad repo visibility 
 
 ## 7. Open items / decisions still needed
 
-1. **"Asztali alkalmazás" requirement** — the original brief asks for a desktop application; the design
-   assumes a web app is acceptable, with wrapping the frontend in Tauri/Electron as the discussed (not
-   decided) fallback. Affects delivery format, not the backend design.
+1. **"Asztali alkalmazás" requirement** — **resolved (2026-10-05).** A web-only deliverable isn't acceptable,
+   so the design ships one SPA wrapped by a thin Windows-only Electron shell (§2.1). Staff login moved to
+   device flow (§2.2), pending the spike in item 13.
 2. **GitHub Organization and label taxonomy** — the org isn't created yet, and the category/priority/location/
    status label values are undefined (the major-change taxonomy in item 10 depends on them).
 3. **Domain for sending email** — need a real domain to verify with Resend (SPF/DKIM/DMARC on a dedicated
@@ -383,15 +428,35 @@ notifications on major changes, without granting them the broad repo visibility 
     ever be revocable/rotatable, e.g. if a reporter shares one somewhere unintended and wants it invalidated.
 12. **Comment privacy convention** — only needed if staff actually hit a case where they want to discuss a
     report without the reporter seeing it (§4.3); not worth designing pre-emptively.
+13. **Device-flow spike** — verify end to end that GitHub device flow works through the Worker proxy: device
+    flow enabled on the app, both endpoints proxied, and the resulting token accepted by `api.github.com` and
+    by the reveal-contact role check. GitHub's own docs disagree on whether device flow suits desktop apps,
+    and no live round trip has been run. Fallback: the web flow, with a relay Worker doing the
+    `client_secret` exchange, run in the shell's window (§2).
+14. **Staff token app type and storage** — OAuth App (long-lived tokens) vs GitHub App (fine-grained, 8-hour
+    tokens that refresh without a secret under device flow); decide together with item 4. Also decide whether
+    the SPA keeps the token in memory (re-login on every launch) or persists it (Electron's default session
+    keeps localStorage across restarts).
 
 ---
 
 ## 8. Next steps
 
-1. Decide the delivery format: web app vs. a desktop wrapper (§7 item 1).
+1. Delivery format is decided: Electron shell around the hosted SPA (§2.1). Still to do: the device-flow
+   spike (§7 item 13).
 2. Stand up the GitHub Organization and pin down the label taxonomy.
 3. Acquire/confirm a domain and verify it with Resend.
 4. Decide PAT vs GitHub App and provision the bot credential.
 5. Implement the edge functions, with submission as the critical path: OTP request → OTP verify-and-submit
-   (issue creation) → status-lookup → webhook receiver → staff OAuth relay → reveal-contact/resend-link.
+   (issue creation) → status-lookup → webhook receiver → staff device-flow proxy → reveal-contact/resend-link.
 6. Build the static frontend's three surfaces: submission form, status page, staff dashboard.
+7. Add the Electron shell (§2.1) and package an unsigned Windows build.
+
+---
+
+## 9. Changelog
+
+- **2026-10-05** — Resolved §7 item 1 (delivery format): one SPA with all three surfaces, hosted on Cloudflare
+  and wrapped by a thin Windows-only Electron shell that opens the hosted URL (new §2.1). Staff login switched
+  from the web-flow OAuth relay to GitHub device flow behind a Worker proxy (new §2.2; §1, §2, §3.4, §4.4
+  patched). Added a §6 mapping row, §7 items 13–14, and §8 steps 1, 5, and 7.

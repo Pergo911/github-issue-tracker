@@ -33,12 +33,16 @@ accessed through **three surfaces**:
   request that creates the GitHub issue via a bot credential.
 - **Status page** — no login. Each submission mints a permanent, unguessable per-issue capability URL
   (`/status/<token>`); it is the reporter's only way to check status/history.
-- **Staff dashboard** — real GitHub identities via OAuth, using org roles (Read / Triage = maintenance staff /
-  Admin = system admin).
+- **Staff dashboard** — real GitHub identities via GitHub device flow (a thin Worker proxy, no `client_secret`),
+  using org roles (Read / Triage = maintenance staff / Admin = system admin).
 
 Reporter-facing logic runs on **Cloudflare Workers + Workers KV**, with **Resend** for email. This is "static
-frontend + a small serverless layer", not "zero backend": GitHub's OAuth token exchange can't run in a browser,
-and the design holds real state (OTPs, issue↔email mapping, status tokens) in KV.
+frontend + a small serverless layer", not "zero backend": GitHub's device-flow endpoints can't be called from a
+browser, and the design holds real state (OTPs, issue↔email mapping, status tokens) in KV.
+
+**Delivery format:** the brief requires a desktop app, so all three surfaces are one SPA, hosted on Cloudflare
+and wrapped by a thin Windows-only Electron shell that just opens the hosted URL (`SPEC.md` §2.1). The SPA has
+no shell-specific code, and status links open in the system browser.
 
 Invariants to preserve:
 
@@ -50,10 +54,10 @@ Invariants to preserve:
 
 ## Open items
 
-The biggest unresolved question is the delivery format. The original brief asks for an **"asztali alkalmazás"
-(desktop application)**, while the design assumes a web app. Wrapping the frontend in Tauri/Electron is the
-discussed, undecided fallback. Everything else open (GitHub org not yet created, label taxonomy, email domain,
-PAT vs GitHub App, OTP parameters, …) is listed in `SPEC.md` §7. Don't treat any of it as settled.
+The delivery format is settled (see the Architecture summary). The first thing to verify is the staff
+device-flow login, which still needs a spike (`SPEC.md` §7 item 13). Everything else open (GitHub org not yet
+created, label taxonomy, email domain, PAT vs GitHub App, OTP parameters, …) is listed in `SPEC.md` §7. Don't
+treat any of it as settled.
 
 ## Agent skills
 
