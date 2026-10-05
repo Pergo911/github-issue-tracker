@@ -54,3 +54,17 @@ The biggest unresolved question is the delivery format. The original brief asks 
 (desktop application)**, while the design assumes a web app. Wrapping the frontend in Tauri/Electron is the
 discussed, undecided fallback. Everything else open (GitHub org not yet created, label taxonomy, email domain,
 PAT vs GitHub App, OTP parameters, …) is listed in `SPEC.md` §7. Don't treat any of it as settled.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for Pergo911/github-issue-tracker (via `gh`); PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
