@@ -1,7 +1,6 @@
 # Spec — Issue Tracker
 
-**Status:** living document, patched/appended as decisions are made. Start date 2026-09-20.
-**Precedence:** this doc is the source of truth for the design; [`CLAUDE.md`](./CLAUDE.md) only summarizes it, so update this doc first.
+**Status:** living document, patched/appended as decisions are made.**Precedence:** this doc is the source of truth for the design; [`CLAUDE.md`](./CLAUDE.md) only summarizes it, so update this doc first.
 
 The system uses a GitHub Organization repo as its backend (GitHub Issues for reports; org roles for staff).
 Two problems shape the design: **reporters shouldn't need a GitHub account**, and **"entirely serverless"
@@ -342,7 +341,7 @@ from the full activity log.
    only write the reporter has is adding comments (below). Comments the reporter posted are visually
    distinguished from staff comments.
 
-**Reporter comments** (requirement from the instructor, 2026-10-06): a reporter can add comments to their own
+**Reporter comments** (requirement from the instructor): a reporter can add comments to their own
 report from the status page.
 
 1. The status page shows a comment box. Submitting it calls an **add-comment** function with the status token
@@ -404,7 +403,7 @@ staff-facing admin UI for managing it is a plausible future enhancement, not req
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Registered users submit reports with location, nature, description | Email allowlist + OTP, no GitHub account. Issue created by the bot with labels (`location:*`, `type:*`) + free-text body.                                                                                                                                                                                 |
 | Users track own reports' status/history                            | Permanent unguessable per-issue link is the authoritative status/history view (no login, no listing of other issues); email notifies on major transitions only and always repeats the link. Also directly resolves GitHub's "no per-issue privacy" gap via capability-based access instead of repo roles. |
-| Users can comment on their own reports (instructor, 2026-10-06)    | Comment box on the status page (§4.3). A token-gated Worker function posts the comment as the bot with a `Reporter:` marker; the reporter needs no GitHub account and no email is written to GitHub.                                                                                                     |
+| Users can comment on their own reports (instructor)               | Comment box on the status page (§4.3). A token-gated Worker function posts the comment as the bot with a `Reporter:` marker; the reporter needs no GitHub account and no email is written to GitHub.                                                                                                     |
 | Authorized users review, categorize, prioritize, assign            | Staff with GitHub Triage/Admin roles: labels (`category:*`, `priority:*`) + assignee.                                                                                                                                                                                                                     |
 | Repair progress trackable; completed-work info recorded            | Open/closed + `status:*` labels (or a Projects v2 board with a single-select "Status" field); resolution notes as issue comments. Major transitions are mirrored out via email to the reporter.                                                                                                           |
 | Multiple roles with different permissions                          | Reporter is "anyone on the allowlist who completes OTP" (not a GitHub role). Maintenance staff = org Triage; system admin = org Admin (can manage members; onboarding is an org invite, automatable via the membership API).                                                                              |
@@ -433,7 +432,7 @@ notifications on major changes, without granting them the broad repo visibility 
 
 ## 7. Open items / decisions still needed
 
-1. **"Asztali alkalmazás" requirement** — **resolved (2026-10-05).** A web-only deliverable isn't acceptable,
+1. **"Asztali alkalmazás" requirement** — **resolved.** A web-only deliverable isn't acceptable,
    so the design ships one SPA wrapped by a thin Windows-only Electron shell (§2.1). Staff login moved to
    device flow (§2.2), pending the spike in item 13.
 2. **GitHub Organization and label taxonomy** — the org isn't created yet, and the category/priority/location/
