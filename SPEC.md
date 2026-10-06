@@ -47,9 +47,9 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
 │  PUBLIC SUBMISSION     │  │    STATUS PAGE          │  │      STAFF DASHBOARD      │
 │  (reporters, no login) │  │  (unguessable link,     │  │  (GitHub login, org role) │
 │                       │  │   no login)             │  │                          │
-│  email → OTP →        │  │  read-only issue view   │  │  octokit.js → api.github │
+│  email → OTP →        │  │  issue view             │  │  octokit.js → api.github │
 │  report form →        │  │  + history              │  │  .com directly (Read/    │
-│  one-shot submit      │  │                        │  │  Triage/Admin)           │
+│  one-shot submit      │  │  + add comment          │  │  Triage/Admin)           │
 └──────────┬────────────┘  └───────────┬─────────────┘  └──────────────────────────┘
            │                           │
            ▼                           ▼
@@ -58,8 +58,9 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
    │  - OTP request                             │        │  (issues, issue_comment) │
    │  - OTP verify + submit (creates issue)     │        └─────────────────────────┘
    │  - status lookup (proxies a read-only      │
-   │    GitHub call — reporter has no GitHub    │───────▶ creates/reads issues as
-   │    credential of their own)                │         bot/service account
+   │    GitHub call — reporter has no GitHub    │───────▶ creates/reads issues and
+   │    credential of their own)                │         posts comments as
+   │  - add-comment (token-gated, bot posts)    │         bot/service account
    │  - webhook receiver (major-change filter)  │         (PAT or GitHub App)
    │  - (staff) reveal-contact / resend-link     │
    └───────────────────┬─────────────────────────┘
@@ -312,8 +313,10 @@ case. Instead:
    label taxonomy is finalized — see §7):
    - **Email-worthy:** issue closed, issue reopened, a `status:*` label added (e.g. `status:in-progress`,
      `status:resolved`) — transitions the reporter would actually want pushed to them.
-   - **Link-only, no email:** comments, assignment changes, category/priority/location label edits, any other
+   - **Link-only, no email:** staff comments, assignment changes, category/priority/location label edits, any other
      `edited` action. Still fully visible on the status page (§4.3) any time the reporter checks it.
+   - **Ignored entirely:** `issue_comment` events for comments the bot itself posted on a reporter's behalf
+     (§4.3, "Reporter comments"); the reporter already knows what they wrote, so there is nothing to email.
 4. For email-worthy changes, receiver looks up the issue number in the `issue-email` KV mapping and sends a
    short notification via Resend naming the change and repeating the permanent status link (so the email
    itself doubles as a way back in even if the original confirmation email was lost).
@@ -334,8 +337,33 @@ from the full activity log.
    credential (§3.3) — a **read-only proxy**, not a direct client-side GitHub call — and returns a sanitized
    view to the frontend. "Sanitized" mainly means: the reporter's own email was never stored in GitHub in the
    first place (§3.3), so there's nothing to scrub on that front.
-4. Frontend renders a read-only status/history view: current status, category/location, timeline of
-   labels/comments/assignment, no edit capability.
+4. Frontend renders the status/history view: current status, category/location, timeline of
+   labels/comments/assignment. The report itself (title, body, labels) is not editable from this page; the
+   only write the reporter has is adding comments (below). Comments the reporter posted are visually
+   distinguished from staff comments.
+
+**Reporter comments** (requirement from the instructor, 2026-10-06): a reporter can add comments to their own
+report from the status page.
+
+1. The status page shows a comment box. Submitting it calls an **add-comment** function with the status token
+   and the comment text. As with status lookup, the reporter has no GitHub credential, so the Worker does the
+   write.
+2. Function resolves `status-token → issue#` in KV (unknown token → the same generic 404), applies a rate
+   limit per token and per IP (the page is a public write endpoint, so this matters more than for reads), and
+   enforces a length cap and non-empty text.
+3. Function posts the comment to the issue via the bot credential (§3.3), with the text prefixed by a fixed
+   marker (e.g. `**Reporter:**`), since the comment's GitHub author is the bot. The status-lookup function
+   uses that marker to tell reporter comments from staff comments when building the timeline, and the staff
+   dashboard shows the same marker. The text is posted as plain text with `@mentions` and markdown/HTML
+   neutralized, so a reporter can't ping arbitrary GitHub users or inject content. **No email address is
+   written into the comment**, preserving the §3.3 invariant.
+4. The webhook receiver ignores the resulting `issue_comment` event (§4.2). Staff see the comment in the
+   dashboard and on GitHub like any other; whether they are actively notified is open (§7 item 15).
+
+Because the status link is a shareable capability URL (§1), anyone holding it can comment, not just the original
+reporter. That follows from the existing link-sharing decision (a spouse or roommate may use it), and the
+marker only says "reporter", not who. If the link leaks, the existing token revocation question (§7 item 11)
+becomes more important.
 
 **New consideration this feature introduces:** since issue comments become visible to whoever holds the link,
 staff need a convention for what's safe to write in a comment. Default for MVP: **treat every comment as
@@ -376,6 +404,7 @@ staff-facing admin UI for managing it is a plausible future enhancement, not req
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Registered users submit reports with location, nature, description | Email allowlist + OTP, no GitHub account. Issue created by the bot with labels (`location:*`, `type:*`) + free-text body.                                                                                                                                                                                 |
 | Users track own reports' status/history                            | Permanent unguessable per-issue link is the authoritative status/history view (no login, no listing of other issues); email notifies on major transitions only and always repeats the link. Also directly resolves GitHub's "no per-issue privacy" gap via capability-based access instead of repo roles. |
+| Users can comment on their own reports (instructor, 2026-10-06)    | Comment box on the status page (§4.3). A token-gated Worker function posts the comment as the bot with a `Reporter:` marker; the reporter needs no GitHub account and no email is written to GitHub.                                                                                                     |
 | Authorized users review, categorize, prioritize, assign            | Staff with GitHub Triage/Admin roles: labels (`category:*`, `priority:*`) + assignee.                                                                                                                                                                                                                     |
 | Repair progress trackable; completed-work info recorded            | Open/closed + `status:*` labels (or a Projects v2 board with a single-select "Status" field); resolution notes as issue comments. Major transitions are mirrored out via email to the reporter.                                                                                                           |
 | Multiple roles with different permissions                          | Reporter is "anyone on the allowlist who completes OTP" (not a GitHub role). Maintenance staff = org Triage; system admin = org Admin (can manage members; onboarding is an org invite, automatable via the membership API).                                                                              |
@@ -437,6 +466,11 @@ notifications on major changes, without granting them the broad repo visibility 
     tokens that refresh without a secret under device flow); decide together with item 4. Also decide whether
     the SPA keeps the token in memory (re-login on every launch) or persists it (Electron's default session
     keeps localStorage across restarts).
+15. **Reporter comment details** (§4.3) — decide: (a) whether staff are notified of a new reporter comment
+    (email to a monitored address, or dashboard-only; GitHub's own notifications still reach assignees and
+    watchers); (b) whether commenting stays open on closed issues (and whether a reporter comment on a closed
+    issue should reopen it); (c) the length cap and rate-limit values; (d) whether reporters may edit or
+    delete their own comments (assumed no for MVP).
 
 ---
 
@@ -448,6 +482,6 @@ notifications on major changes, without granting them the broad repo visibility 
 3. Acquire/confirm a domain and verify it with Resend.
 4. Decide PAT vs GitHub App and provision the bot credential.
 5. Implement the edge functions, with submission as the critical path: OTP request → OTP verify-and-submit
-   (issue creation) → status-lookup → webhook receiver → staff device-flow proxy → reveal-contact/resend-link.
+   (issue creation) → status-lookup → add-comment → webhook receiver → staff device-flow proxy → reveal-contact/resend-link.
 6. Build the static frontend's three surfaces: submission form, status page, staff dashboard.
 7. Add the Electron shell (§2.1) and package an unsigned Windows build.

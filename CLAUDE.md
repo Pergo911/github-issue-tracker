@@ -32,7 +32,8 @@ accessed through **three surfaces**:
 - **Public submission form** — no login. Email allowlist + one-time passcode (OTP), verified in the same
   request that creates the GitHub issue via a bot credential.
 - **Status page** — no login. Each submission mints a permanent, unguessable per-issue capability URL
-  (`/status/<token>`); it is the reporter's only way to check status/history.
+  (`/status/<token>`); it is the reporter's only way to check status/history, and where they add comments to
+  their own report (posted by the bot with a reporter marker).
 - **Staff dashboard** — real GitHub identities via GitHub device flow (a thin Worker proxy, no `client_secret`),
   using org roles (Read / Triage = maintenance staff / Admin = system admin).
 
