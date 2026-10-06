@@ -451,12 +451,3 @@ notifications on major changes, without granting them the broad repo visibility 
    (issue creation) → status-lookup → webhook receiver → staff device-flow proxy → reveal-contact/resend-link.
 6. Build the static frontend's three surfaces: submission form, status page, staff dashboard.
 7. Add the Electron shell (§2.1) and package an unsigned Windows build.
-
----
-
-## 9. Changelog
-
-- **2026-10-05** — Resolved §7 item 1 (delivery format): one SPA with all three surfaces, hosted on Cloudflare
-  and wrapped by a thin Windows-only Electron shell that opens the hosted URL (new §2.1). Staff login switched
-  from the web-flow OAuth relay to GitHub device flow behind a Worker proxy (new §2.2; §1, §2, §3.4, §4.4
-  patched). Added a §6 mapping row, §7 items 13–14, and §8 steps 1, 5, and 7.

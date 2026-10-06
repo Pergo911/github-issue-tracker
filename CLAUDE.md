@@ -18,9 +18,9 @@ explicitly asks to start implementation.
 ## Documents
 
 - [`SPEC.md`](./SPEC.md) is the living design doc and the **source of truth**: architecture, flows, data
-  model, requirement mapping, GitHub limits, open items (§7), next steps (§8), and a Changelog. Read it before
+  model, requirement mapping, GitHub limits, open items (§7), next steps (§8). Read it before
   making design claims; the summary below is deliberately incomplete.
-- When a decision changes, patch `SPEC.md` first (with a Changelog entry), then update this file only if the
+- When a decision changes, update this file only if the
   summary below is affected. On conflict, `SPEC.md` wins.
 - Docs are written in English; the original requirements brief is Hungarian and stays verbatim.
 
