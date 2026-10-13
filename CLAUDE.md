@@ -55,10 +55,8 @@ Invariants to preserve:
 
 ## Open items
 
-The delivery format is settled (see the Architecture summary). The first thing to verify is the staff
-device-flow login, which still needs a spike (`SPEC.md` §7 item 13). Everything else open (GitHub org not yet
-created, label taxonomy, email domain, PAT vs GitHub App, OTP parameters, …) is listed in `SPEC.md` §7. Don't
-treat any of it as settled.
+Open decisions live on the wayfinder map, issue #1 (`gh issue view 1`); `SPEC.md` §7 records each one as it
+resolves. Treat anything unresolved there as open.
 
 ## Agent skills
 

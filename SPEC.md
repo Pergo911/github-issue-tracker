@@ -1,6 +1,6 @@
 # Spec — Issue Tracker
 
-**Status:** living document, patched/appended as decisions are made.**Precedence:** this doc is the source of truth for the design; [`CLAUDE.md`](./CLAUDE.md) only summarizes it, so update this doc first.
+**Editing:** edit in place and state the current design only; history lives in git and the ADRs. **Precedence:** this doc is the source of truth for the design; [`CLAUDE.md`](./CLAUDE.md) only summarizes it, so update this doc first.
 
 The system uses a GitHub Organization repo as its backend (GitHub Issues for reports; org roles for staff).
 Two problems shape the design: **reporters shouldn't need a GitHub account**, and **"entirely serverless"
@@ -186,8 +186,7 @@ needed, which Workers/Edge functions can't easily do anyway).
   sufficient — org-level and App-level webhooks exist but add nothing needed here.
 - Every payload includes the full issue object (number, title, body, labels, assignees, state) — so a receiving
   function can always identify _which_ issue changed. It does **not** include any custom "reporter" field —
-  GitHub has no such concept — which is why an external mapping is needed (see §3.3's privacy finding, which
-  supersedes the originally-considered "hidden marker in the issue body" idea).
+  GitHub has no such concept — which is why an external mapping is needed (see §3.3's privacy finding).
 - Signature verification is a standard, well-supported HMAC-SHA256 check (`X-Hub-Signature-256` header against
   the webhook's shared secret) — trivial in any WebCrypto-capable runtime, including Workers.
 - **Reliability caveat to document explicitly:** GitHub does not automatically retry failed webhook deliveries,
@@ -210,8 +209,7 @@ needed, which Workers/Edge functions can't easily do anyway).
 
 ### 3.3 Creating issues on behalf of reporters who have no GitHub identity
 
-**Confirmed feasible**, via a dedicated service-account credential — and this research changed a design
-decision (see privacy note below).
+**Confirmed feasible**, via a dedicated service-account credential (see the privacy note below).
 
 - Two viable auth options for the bot that creates issues:
   - A **fine-grained PAT** (scoped to `Issues: write` only) on a dedicated machine-user account added as an org
@@ -229,8 +227,8 @@ decision (see privacy note below).
   shape — a bot-account credential turning anonymous public form submissions into GitHub writes (commits/PRs in
   its case) specifically so the visitor never needs a GitHub identity. "Form → bot creates a GitHub issue" is
   also a common no-code Zapier/Make pattern, i.e. not a novel or fragile idea.
-- **Privacy finding that changes the design:** the previously-assumed "hidden HTML comment in the issue body"
-  trick for stashing the reporter's email is **not actually private** — it's only invisible in _rendered_
+- **Privacy finding:** stashing the reporter's email in a "hidden HTML comment in the issue body" is **not
+  actually private** — it's only invisible in _rendered_
   Markdown; the raw body (comment included) is returned by the API and visible via raw views to anyone with
   repo Read access. The same is true of a Projects v2 custom field — item visibility still gates on repo Read
   access, so it's equally exposed to every staff member, not just the ones who need contact info. **Decision:
@@ -266,7 +264,7 @@ sense some readers assume that word means.
 
 ---
 
-## 4. Reporter-side flow (revised: adds a permanent status link)
+## 4. Reporter-side flow
 
 ### 4.1 Submission (single-shot, no session)
 
@@ -364,7 +362,7 @@ reporter. That follows from the existing link-sharing decision (a spouse or room
 marker only says "reporter", not who. If the link leaks, the existing token revocation question (§7 item 11)
 becomes more important.
 
-**New consideration this feature introduces:** since issue comments become visible to whoever holds the link,
+**Comment visibility:** since issue comments become visible to whoever holds the link,
 staff need a convention for what's safe to write in a comment. Default for MVP: **treat every comment as
 reporter-visible** and rely on staff discipline (don't discuss anything sensitive in-issue). A documented
 upgrade path if that proves insufficient: adopt a marker convention (e.g. a comment prefixed `[internal]`) that
