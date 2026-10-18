@@ -1,6 +1,6 @@
 # Spec — Issue Tracker
 
-**Editing:** edit in place and state the current design only; history lives in git and the ADRs. **Precedence:** this doc is the source of truth for the design; [`CLAUDE.md`](./CLAUDE.md) only summarizes it, so update this doc first.
+**Editing:** edit in place and state the current design only; history lives in git and the ADRs. **Precedence:** this doc is the source of truth for the design; [`AGENTS.md`](./AGENTS.md) only summarizes it, so update this doc first.
 
 The system uses a GitHub Organization repo as its backend (GitHub Issues for reports; org roles for staff).
 Two problems shape the design: **reporters shouldn't need a GitHub account**, and **"entirely serverless"
