@@ -45,6 +45,10 @@ _Avoid_: Admin panel, back office
 A fault someone has reported, tracked from submission to resolution.
 _Avoid_: Ticket, issue, fault
 
+**Submission attempt**:
+One verified effort to file a Report. It can still be pending after an interruption; resuming it continues the same effort rather than filing another Report.
+_Avoid_: Reporter session, pending Report
+
 **Reporter**:
 A person on the Allowlist who submits Reports. Has no GitHub identity and no login.
 _Avoid_: User, resident, tenant, requester
@@ -70,11 +74,11 @@ Replacing a Report's Status link with a new one, which ends the old link. Staff 
 _Avoid_: Rotate, revoke, regenerate
 
 **Erasure**:
-What a Reporter's "remove my data" request resolves to: the Report is deleted and the Allowlist entry removed. Per-Report by design; nothing else is keyed on the address.
+What a Reporter's "remove my data" request resolves to: the Report and associated contact/recovery information are removed, including any unfinished Submission attempt, and the Allowlist entry is removed. Per-Report by design, not an automatic search for all Reports from an address.
 _Avoid_: Right to be forgotten, purge, GDPR wipe
 
 **Major change**:
-A change to a Report significant enough to email its Reporter: it is closed, it is reopened, or it enters a Status with the notify flag while open. Everything else is visible only on the Status link.
+A change to a Report significant enough to email its Reporter: it is closed, it is reopened, or it enters a Status with the notify flag while open. Other changes do not send email; the Status page shows the permitted progress history.
 
 **Staff**:
 People with a GitHub identity and a role on a Deployment's reports repo. A Viewer, Maintenance staff or a System admin.
@@ -114,7 +118,7 @@ Staff's ranking of how urgent a Report is. Optional: a Report without one is unt
 _Avoid_: Urgency, severity
 
 **Status**:
-The stage an open Report has reached in its handling, one per open Report. A closed Report has no Status.
+The stage an open Report has reached in its handling, expected to be one per open Report. Missing or conflicting Status needs Staff correction, not an invented stage. A closed Report has no Status.
 _Avoid_: State, stage
 
 **Initial status**:

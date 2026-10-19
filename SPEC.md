@@ -28,7 +28,7 @@ Three design decisions follow from that:
    not a leak.
 3. **Email is a secondary, best-effort notification channel, not the only way to track status.** To avoid
    emailing on every minor label/comment change, email fires only on major status transitions (§4.2); the
-   permanent link is the authoritative place to see full history at any time.
+   permanent link is authoritative for the Reporter-visible progress/history (§4.3).
 
 Staff-side design: repo roles (Read/Triage/Admin), device-flow login through a thin Worker proxy (§2.2), labels
 for location/category/priority/status (§2.3), assignee for the responsible technician, comments for resolution
@@ -48,7 +48,7 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
 │                       │  │   no login)             │  │                          │
 │  email → OTP →        │  │  issue view             │  │  fetch → api.github      │
 │  report form →        │  │  + history              │  │  .com directly (Read/    │
-│  one-shot submit      │  │  + add comment          │  │  Triage/Admin)           │
+│  submit + recovery    │  │  + add comment          │  │  Triage/Admin)           │
 └──────────┬────────────┘  └───────────┬─────────────┘  └──────────────────────────┘
            │                           │
            ▼                           ▼
@@ -57,7 +57,7 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
    │  - OTP request                             │        │  (issues)                │
    │  - OTP verify + submit (creates issue)     │        └─────────────────────────┘
    │  - status lookup (proxies a read-only      │
-   │    GitHub call — reporter has no GitHub    │───────▶ creates/reads issues and
+│    GitHub calls — reporter has no GitHub   │───────▶ creates/reads issues and
    │    credential of their own)                │         posts comments as
    │  - add-comment (token-gated, bot posts)    │         the Bot (a GitHub App
    │  - webhook receiver (major-change filter)  │         installation token)
@@ -72,16 +72,17 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
    │ - email allowlist         │  │ - OTP hash, expiry, tries │  │ - OTP codes               │
    │ - issue# → email          │  │ - per-email/-token caps   │  │ - confirmation + link     │
    │ - status-token → issue#   │  │ - Deployment email budget │  │ - major-change mail       │
-   │ - issue# → status-token   │  │                           │  │ - reissued-link mail      │
-   │ - webhook dedupe IDs      │  │                           │  │                           │
+│ - issue# → status-token   │  │ - submission recovery     │  │ - reissued-link mail      │
+│ - webhook dedupe IDs      │  │ - mapping lifecycle       │  │                           │
    └───────────────────────────┘  └───────────────────────────┘  └───────────────────────────┘
 ```
 
 **Platform choice:** consolidate everything on **Cloudflare Workers, Workers KV and Durable Objects**, and serve
 the static SPA from the same Worker as Workers static assets, so the SPA and the Worker share one origin. Pages is
 out: Pages Functions can't define a Durable Object class or use the Rate Limiting binding (§2.6).
-KV holds write-once or read-mostly data; SQLite-backed Durable Objects hold the OTP and abuse-control state that
-needs atomic updates ([ADR 0003](./docs/adr/0003-otp-and-abuse-state-in-durable-objects.md), §4.5). Both keep the
+KV holds write-once or read-mostly data; SQLite-backed Durable Objects hold OTPs, abuse controls and recoverable
+submission progress ([ADR 0003](./docs/adr/0003-otp-and-abuse-state-in-durable-objects.md),
+[ADR 0005](./docs/adr/0005-recover-submissions-without-retrying-uncertain-creates.md), §4.1, §4.5). Both keep the
 whole backend on one platform instead of splitting across providers.
 
 **Deployment model:** one **Deployment** per **Organization**, self-deployed (see [`GLOSSARY.md`](./GLOSSARY.md) and
@@ -173,7 +174,7 @@ system semantics. A Deployment can't add a fifth dimension or drop one.
 | `category` | Reporter on the form; Staff may correct it (a label swap, link-only, no email) | exactly one                        |                                                                                         |
 | `location` | Reporter on the form                                                          | exactly one                        | Plus an optional free-text "exact place" in the issue body.                             |
 | `priority` | Staff only                                                                    | zero or one                        | No value means untriaged. The values are ordered, so the dashboard can sort by them.    |
-| `status`   | The system: the bot on creation, the dashboard on transitions                 | exactly one on every open Report   | The dashboard swaps the label in one call, so there is never more than one.             |
+| `status`   | The system: the bot on creation, the dashboard on transitions                 | exactly one on supported open-Report writes | The dashboard swaps the label in one call; manual edits can violate this (§2.4). |
 
 Reporters get no urgency control. The form shows a per-Deployment **emergency notice** instead (for example, who
 to call for fire, gas or flooding).
@@ -184,7 +185,8 @@ a per-language map. A colour is an optional six-digit hex per value: it drives t
 colour of the GitHub label the sync creates, and unset it falls back to a fixed neutral grey. The Deployment's configuration is the source of truth; the reports repo's labels are derived from it by a
 one-way seed/sync step ([ADR 0002](./docs/adr/0002-taxonomy-declared-in-deployment-configuration.md)). Label names
 are `dimension:value`, lowercase English kebab-case, as stable identifiers. The Worker serves the taxonomy to the
-form and dashboard from configuration and ignores labels outside it. Changing the taxonomy is a configuration
+form and dashboard from configuration and ignores unrelated labels; obsolete classification uses the display
+fallbacks in §2.4 rather than becoming configured values. Changing the taxonomy is a configuration
 change plus a sync, done by a System admin. The seed values for the reference Deployment are in Appendix A.
 
 **Status flags.** Status values are per-Deployment, but each can carry flags declared in configuration, so the
@@ -197,8 +199,9 @@ system never infers behaviour from a name. Two flags exist and there are no othe
 
 **Closed is GitHub's state, never a label.** Closed as `completed` (or with no reason) means fixed; `not_planned`
 means rejected and `duplicate` means a duplicate, and both of those count as rejected. The status page shows all
-three as "closed" with the reason. Closing removes the status label, and a reopen applies the initial status. If Staff close or reopen on github.com instead of the dashboard, the status
-page treats the closed state as authoritative and ignores any stale status label.
+three as "closed" with the reason. Dashboard closing removes the Status label, and dashboard reopening applies
+the Initial status. A closed Report ignores any stale Status label. A github.com reopen or a hand-removed label
+may leave an open Report without a valid Status: the fallback in §2.4 exposes this, without an automatic repair.
 
 **No Projects v2.** Labels plus open/closed state only. Projects v2 would add GraphQL, an extra token permission for
 device-flow login, a second source of truth for status, and `projects_v2_item` events that arrive only on a
@@ -230,18 +233,27 @@ own" never applies.
 
 **Views.** Three Report views, plus the two Admin screens below. No metrics or insights view in the MVP.
 
-- **Board** — a Kanban view over open Reports, one column per Status in the configured order. Cards carry the
-  title, category/location/priority chips, assignee, age and a reporter-comment mark. Moving a card is the
-  one-swap status PATCH (§2.3): drag-and-drop, with a per-card status menu as the accessible equivalent — never
+- **Board** — a Kanban view over open Reports, one column per Status in the configured order plus the exceptional
+  column below. Cards carry the title, category/location/priority chips, assignee, age and a reporter-comment mark
+  when its data has been loaded. Moving a card is the one-swap status PATCH (§2.3): drag-and-drop, with a per-card
+  status menu as the accessible equivalent — never
   two Status labels.
 - **List** — the filterable table, sorted by the configured priority order, then oldest first.
-- **Detail** — one Report: the neutralized body rendered as plain text (no markdown pipeline, §4.1), labels,
-  assignee, and the timeline with `**Reporter:**`-marked reporter comments distinguished from staff comments
-  (§4.3); a comment box is a Viewer's only write.
+- **Detail** — one Report: the canonical body envelopes decoded and rendered as plain text (no markdown pipeline,
+  §4.1), labels, assignee, and the timeline with Bot-authored canonical Reporter comments distinguished from
+  Staff comments (§4.3); a comment box is a Viewer's only write.
 - **Allowlist** and **Configuration** — Admin-only (§5, below).
 
 The board and list refresh on navigation and via a manual refresh control; there is no live push (the webhook
 reaches the Worker, §3.2, not the SPA).
+
+**Invalid Status is visible, not invented**
+([Status views, neutralization and failure paths](https://github.com/Pergo911/github-issue-tracker/issues/18)). An open
+Report with no configured Status, multiple Statuses, or an obsolete `status:*` label goes in a **Status needs
+correction** Board column and has a warning in List and Detail. It never disappears from the views. Maintenance
+staff repair it with the existing Status control, removing stale/conflicting Status labels in the same PATCH.
+The Status page says **Awaiting status update**, localized through the catalog. Neither the dashboard's read
+projection nor the Worker pretends Initial status was recorded; the Worker does not apply Initial status on reopen.
 
 **Search and filters.** A free-text search box (GitHub's search API — read access suffices) plus filter chips:
 Category, Location, Priority, Status, assignee, and "untriaged" (Priority absent), with an open/closed state
@@ -255,8 +267,14 @@ reopening applies the `initial` Status in that call (§2.3, §4.2). GitHub never
 two-Status or zero-Status Report, so no stray `labeled` event can double-email.
 
 **Reporter comments are noticed dashboard-only** (§4.3): a "has Reporter comments" filter chip and a "last
-Reporter comment" sort. No unread badges — they would need per-staff read-tracking state, which nothing else in
-the design has, and GitHub's own notifications already reach assignees and watchers.
+Reporter comment" sort. When either is used, fetch all pages of `GET /repos/{owner}/{repo}/issues/comments`
+(`per_page=100`, following `Link`), classify by Bot identity plus the canonical envelope (§4.3), and group by the
+parent issue. Ignore PR entries and comments outside the fetched Reports. Cache the scan in TanStack Query only,
+not KV; no per-Report N+1 fetches. Until the scan completes, show loading rather than treating unscanned Reports
+as having no Reporter comments. A card's Reporter-comment mark uses that cache when available; otherwise it is
+unknown, not a claim that there are none. Manual refresh rebuilds the scan, including edits/deletions; `since`
+is updated-since, not a deletion feed. No unread badges — they would need per-staff read-tracking state, and
+GitHub's own notifications already reach assignees and watchers.
 
 **No bulk actions in the MVP.** The REST API the dashboard uses has no bulk issue endpoints, and GraphQL batching
 would buy nothing at this volume.
@@ -317,7 +335,8 @@ Two kinds of strings, two homes:
   catalog module from `shared/`, but the Worker reads from it only the body captions the Bot writes into GitHub
    (§4.1) and the close-reason words that fill the Closed template's reason placeholder (§4.6): API
   errors and status data travel as stable codes and structured fields (an error code; a comment's
-  `author: "reporter" | "staff"` with the marker already stripped) and the SPA localizes them. Adding a language is a code contribution; a Deployment configures one of the shipped languages and
+  `author: "reporter" | "staff"` with the canonical envelope already decoded) and the SPA localizes them.
+  Adding a language is a code contribution; a Deployment configures one of the shipped languages and
   cannot invent one.
 - **Deployment-authored wording stays in the `config` KV key** (§2.4): the six template strings, the taxonomy
   display names, the emergency notice, the code-sent help text, the sender/reply-to/footer — written by the
@@ -339,9 +358,9 @@ Two kinds of strings, two homes:
   a dialog's close label, a drag-and-drop announcement, an icon's accessible name — comes from the catalog (§2.7).
 
 **Protocol strings never localize.** The comment marker `**Reporter:**` (§4.3) is fixed English forever —
-the status-lookup function machine-matches it, so a localized marker would couple classification to
-configuration and misclassify every comment written before a language change. The status page and
-dashboard strip the marker and render a localized label instead; GitHub keeps the raw marker for Staff.
+the status-lookup function matches it inside the Bot-authored canonical envelope (§4.3), so a localized marker
+would couple classification to configuration and misclassify every comment written before a language change. The status page and
+dashboard decode the envelope and render a localized label instead; GitHub keeps the raw marker for Staff.
 Label identifiers (`dimension:value`) are likewise language-neutral and never rendered as copy (§2.3).
 
 **Locale.** A `timezone` configuration field (an IANA name; unset → UTC, fail-safe) fixes the clock for the
@@ -567,14 +586,14 @@ needed, which Workers/Edge functions can't easily do anyway).
   repo Read access. The same is true of a Projects v2 custom field — item visibility still gates on repo Read
   access, so it's equally exposed to every staff member, not just the ones who need contact info. **Decision:
   keep the reporter's email out of GitHub entirely.** Store the issue-number → email mapping only in Workers
-  KV (the same store already needed for OTPs). This is the only option that actually restricts who can see a
+  KV, with a temporary copy only in submission recovery (§4.1, §5). This restricts who can see a
   reporter's email — worth calling out because minimizing exposure of personal data by design is a real, not
   just cosmetic, consideration in an EU context (GDPR).
 - **Rate limits:** the bot's token gets its own quota bucket (starts at 5,000/hr, scales with GitHub Organization size),
   separate from staff's per-user quotas — irrelevant at building-scale volume. The one real risk is that _all_
   anonymous submissions share this single token/bucket, so abuse (e.g. OTP/submission spam) could in theory
   exhaust it for everyone at once. Mitigate at the OTP/submission layer (§4.5's limits), not here. Status lookup
-  is the other public path that spends it (two calls per view), so §4.5 caches it briefly.
+  is the other public path that spends it (an issue read plus paginated timeline reads), so §4.5 caches it briefly.
 
 <details><summary>Sources</summary>
 
@@ -601,7 +620,7 @@ sense some readers assume that word means.
 
 ## 4. Reporter-side flow
 
-### 4.1 Submission (single-shot, no session)
+### 4.1 Submission (one verified attempt, recoverable without a login)
 
 1. Reporter fills out the report form fully: email, category, location, a title, the description and an optional
    exact place (all fields, before any verification step). The form shows the Deployment's emergency notice
@@ -620,28 +639,64 @@ sense some readers assume that word means.
    - The "code sent" screen shows the Deployment's configured help text for a code that never arrives (check the
      address; whom to contact), because the generic response can't say why.
 3. Reporter enters the received code into the same form.
-4. Reporter clicks final "submit." The frontend calls a single **OTP-verify-and-submit** function with
-   email + code + all report fields together, in one request.
-   - Function asks the email's Durable Object to verify the code. The attempt is counted first, then the hash
-     compared and the expiry checked, and the record deleted on success, all in one atomic step, so a code is
-     single-use and allows at most 5 wrong guesses (§4.5). Every failure looks the same to the caller.
-   - On success: creates the GitHub issue via the bot credential (§3.3), with the category and location
-     labels and the Deployment's initial status label (§2.3), the Reporter's title as the issue title, and a
-     body composed from the fixed template below. **No email address is written into GitHub anywhere** — not the body, not a
-     custom field.
-   - Generates a **status token**: 16 random bytes from a CSPRNG, base64url-encoded (22 characters, 128 bits), not
-     derived from the issue number, which is guessable/sequential. Writes `issue# → email`,
-     `status-token → issue#` and the reverse `issue# → status-token` into KV, all in plaintext: staff resend
-     needs the reverse lookup, and anyone who can read KV already sees the emails.
-   - Returns a confirmation to the reporter that includes the **permanent status link**
-     (`https://<app>/status/<token>`), and immediately sends a confirmation email (§4.6) containing the same link —
-     the link must survive the reporter closing the tab without saving/bookmarking it, so email is the durable
-     delivery mechanism for it, not just the on-screen confirmation.
+4. Reporter clicks final "submit." The frontend calls **OTP-verify-and-submit** with email + code + all Report
+   fields and a stable, unguessable submission-attempt credential, retained in `sessionStorage` before dispatch
+   so a lost response can be recovered. Validate the fields before consuming the code.
+   - The email's Durable Object reserves/counts the attempt before comparing the hash/expiry. On success it **atomically
+     consumes the OTP and persists the pending submission**, including its canonical payload/fingerprint, recovery
+     credential hash, independent nonsecret correlation marker and fixed Status token. A code is single-use and
+     allows at most 5 wrong guesses (§4.5). OTP failures remain indistinguishable. Replaying the same verified
+     attempt resumes it; it does not verify the spent OTP again. Changed payloads cannot reuse its credential.
+   - Persist a dispatch fence **before** creating the GitHub issue via the Bot (§3.3). It carries Category,
+     Location and Initial status labels (§2.3), the validated Reporter's title, and the fixed body template below.
+     The body also carries the independent correlation marker as trusted machine metadata, outside the Reporter
+     text. **No Reporter email, recovery credential or Status token is written into GitHub.**
+   - Persist the returned issue number immediately. Through the Report gate, write `issue-email:<issue#>`,
+     `status-token:<token>` and `issue-token:<issue#>` to KV using the fixed values. The Status token is 16 CSPRNG
+     bytes, base64url-encoded (22 characters, 128 bits), never derived from the sequential issue number. These
+     KV values remain plaintext: gated staff lookup needs them, and a KV reader already sees the emails.
+   - Only after the issue and all three mappings are acknowledged does the attempt complete. Return the
+     permanent Status link (`https://<app>/status/<token>`) and attempt the confirmation email (§4.6). Email failure
+     is logged but cannot undo completion or invite another create; the on-screen link remains usable. KV
+     acknowledgement is not immediate global visibility: its accepted propagation lag still applies.
 
-There is intentionally no separate "verify, then get a token, then submit later" phase for the OTP itself —
-collapsing verify and submit into one call avoids needing to issue or store any session artifact for the
-browser to hold. The status token is a different kind of token: a long-lived capability credential for reading
-one issue, not a short-lived auth session.
+**Recovery is durable, not exactly-once GitHub creation**
+([Status views, neutralization and failure paths](https://github.com/Pergo911/github-issue-tracker/issues/18),
+[ADR 0005](./docs/adr/0005-recover-submissions-without-retrying-uncertain-creates.md)):
+
+- While mapping writes are pending, the SPA shows a localized **Still saving your Report** state. A
+  credential-gated, rate-limited resume operation lets the same tab recover after refresh without a new OTP.
+  Treat the recovery credential as a temporary bearer secret (at least 128 random bits), separate from both
+  the public correlation marker and the permanent Status token. It authorizes only that attempt, not new Reports.
+- Retry missing mappings for a **known issue** with fixed values and backoff. Persist phases and write progress;
+  DO requests can interleave across network awaits. Do not rely on a long `blockConcurrencyWhile` callback.
+  Alarms are at-least-once with finite built-in retries; re-arm longer recovery deliberately. Respect KV's
+  same-key write limit and never put recovery counters or staging records in KV.
+- An interrupted or timed-out issue create is **uncertain**, including a crash after its dispatch fence. Scan
+  the repository's issues (`state=all`, paginated) for the exact correlation marker and expected Bot identity.
+  Adopt a unique match; zero or multiple matches require manual reconciliation. Search indexing or a negative
+  scan cannot prove non-creation. **Never automatically repeat an uncertain create.** GitHub supplies no
+  documented durable idempotency key; this design does not promise exactly-once or automatic eventual success.
+- An unresolved attempt is retained and blocks another submission for that email until reconciled or explicitly
+  discarded. Show a reference and the configured contact instructions when human help is needed, not a blind
+  resubmit button. A System admin's operational procedure inspects the retained attempt and GitHub marker,
+  associates a verified existing issue or explicitly discards/cancels the attempt and its partial mappings.
+  The procedure's tooling is an implementation choice, not a new dashboard screen or a new planning ticket.
+- The Report gate coordinates finalization, Reissue and Erasure with persisted lifecycle state, including a
+  deletion tombstone. Register known-issue recovery there before KV finalization. Delayed work cannot recreate
+  a deleted Report's mappings or overwrite a replacement token. Recovery rechecks issue existence and current
+  lifecycle state; it is not a blind replay of initial puts.
+- Temporarily retain the verified email and submission payload in the Email gate. Remove the payload when
+  complete; retain only a replayable completion receipt (credential hash, payload fingerprint, issue number,
+  original confirmation result/link and expiry) for **24 hours**, then clean it up. A new attempt must not
+  overwrite a still-valid receipt. A receipt never exposes a successor token after Reissue and is cancelled by
+  Erasure. Unresolved attempts have no silent expiry: reconciliation/discard and erasure remove their recovery
+  data explicitly (§5).
+
+There is no separate "verify now, submit a different Report later" session and no Reporter login. The temporary
+recovery credential resumes only the already verified submission; the Status token is the permanent capability
+for the resulting Report. Closing the tab may lose recovery access; persisted work continues, and the best-effort
+confirmation email or Staff contact is the route back.
 
 **Field inventory and limits** ([ticket](https://github.com/Pergo911/github-issue-tracker/issues/13)). Beyond the
 taxonomy picks (§2.3), the form has exactly three free-text fields, trimmed server-side like comments
@@ -659,15 +714,29 @@ several Reports apart in their mailbox (§7 item 8). The form collects no identi
 no phone: the allowlisted email is the identity, the Allowlist `note` already carries a name/unit for Staff on
 the gated screen (§4.4), and every extra PII field is one more thing to keep out of GitHub forever.
 
-**The issue body is a fixed template under one neutralization rule.** Its captions (Category / Location /
+**Titles use validation, not an encoding wrapper.** After the existing trim/newline normalization, the initial
+allowlist is Unicode letters, combining marks and numbers; ordinary space (`U+0020`); and punctuation
+`. , ! ? ( ) ' " - – — ‘ ’ “ ”`. Reject other characters with a catalog error; do not silently strip/replace them.
+Accepted titles are stored unchanged and rendered as plain text in the SPA and emails. They are not fenced.
+Backticks, Markdown delimiters, `@`, `#`, angle brackets, colons, slashes, emoji and control characters are outside
+this allowlist. The 3–80-character limit remains.
+
+**Accepted implementation risk:** the live spike proved neither arbitrary raw titles nor the tested inline-code
+wrapper literal, and did **not** validate this restricted alphabet. The human chose to finish planning without
+another title spike. During implementation, test actual title rendering/round-trips and possible auto-links
+(including domain-like and hexadecimal text), then adjust the allowlist explicitly if needed. Do not claim
+verified title inertness, silently allow unrestricted raw titles, or replace Reporter titles with generated ones.
+This is implementation validation of the chosen policy, not an open design decision.
+
+**The issue body is a fixed template with fenced free text.** Its captions (Category / Location /
 Exact place / Description) come from the code catalog for the configured language (§2.5) — the template's
 structure stays in code — so a Hungarian Deployment writes Hungarian captions into GitHub, and a written
 body keeps its captions across a later language change. The body repeats the category and
 location **display names** (the labels carry only the kebab-case identifiers), the exact place when present,
-then the description as plain text. All Reporter-controlled free text — title, exact place, description —
-enters GitHub under the same neutralization as comments (§4.3): markdown and HTML dead, `@mentions` dead, no
-auto-linking, so a pasted URL stays inert text. One rule, applied identically wherever Reporter text reaches
-GitHub — body, comments, the `Reporter:`-marked path — so nothing can ping arbitrary users or inject content.
+then the description. Wrap each Reporter-authored body field with the dynamic code-fence mechanism of §4.3;
+captions and correlation metadata stay outside the fences. The SPA decodes canonical raw envelopes and renders
+plain text, not GitHub's HTML or a Markdown pipeline. The safety objective is the same everywhere — no active
+Reporter Markdown/HTML, mentions or auto-links — but titles use the separate validated-input policy above.
 
 **No photos in the MVP.** GitHub has no official attachment API (§6): the undocumented `uploads.github.com`
 endpoint exists for the web editor, is not documented to accept an installation token, and could break without
@@ -688,8 +757,8 @@ case. Instead:
    system email (§4.3, §7 item 15a, [ticket](https://github.com/Pergo911/github-issue-tracker/issues/11)).
 2. Receiver verifies the HMAC signature.
 3. Receiver **drops** events that can never be emailed, before anything else:
-   - `deleted`: it purges `issue-email`, `issue-token` and `status-token` for that issue and stops. `transferred`
-     is unsupported and ignored.
+   - `deleted`: the Report gate records the deletion, cancels associated recovery/receipts, and purges
+     `issue-email`, `issue-token` and `status-token` (§4.1, §5), then stops. `transferred` is unsupported and ignored.
    - The event's `sender` is the Bot. GitHub fires one `labeled` per label when an issue is created with labels,
      so the bot's own creation-time events (and its reporter comments) would otherwise look like a status change.
    - A status entered while the Report is closed: a stale label, since closed is GitHub's state (§2.3).
@@ -701,10 +770,11 @@ case. Instead:
    - **Reopened.**
    - **A status entered while the Report is open, when that status has the `notify` flag.**
 
-   Everything else is **link-only, no email**, and fully visible on the status page (§4.3) any time the reporter
-   checks it: staff comments, assignment changes, priority/category/location edits, title and body edits, entering
-   a status without `notify`, and every `unlabeled`. Staff comments stay link-only on purpose: a Staff member who
-   needs something from the Reporter uses reveal-contact (§4.4).
+   Everything else sends **no email**: Staff comments, assignment changes, Priority/Category/Location edits, title
+   and body edits, entering a Status without `notify`, and every `unlabeled`. The Status page exposes only its
+   public projection (§4.3): Priority remains private, assignment is presence-only, and title/body edits update
+   current content rather than promising a revision archive. Staff comments stay link-only on purpose: a Staff
+   member who needs something from the Reporter uses reveal-contact (§4.4).
 5. For a Major change, receiver checks `X-GitHub-Delivery` against the dedupe KV (skip if already processed) and
    writes the key only now, so ignored events cost no KV writes. It then looks up the issue number in the
    `issue-email` KV mapping and sends a short notification via Resend (§4.6) naming the change and repeating the status
@@ -716,7 +786,7 @@ one email (`closed`, plus an `unlabeled` that never mails), a reopen sends one, 
 priority change sends one. Two `notify` statuses added at once (which breaks the one-status invariant) send two.
 Deliveries have no ordering guarantee, so emails can arrive out of order; the status link is authoritative.
 
-This makes the status link the single source of truth for full history, and email a lighter-weight "something
+This makes the status link authoritative for Reporter-visible progress/history, and email a lighter-weight "something
 worth your attention happened" nudge — closer to how most real issue trackers separate a notification digest
 from the full activity log.
 
@@ -729,15 +799,57 @@ from the full activity log.
    replaced and to check the latest email). Rate-limit this endpoint (§4.5) — the token's entropy makes
    brute-forcing impractical, but there's no cost to also throttling guesses. The page also declares
    `Referrer-Policy: no-referrer`, so the token in the URL never leaks to any site a Reporter navigates to from it.
-3. Function reads the issue (title, labels/status, assignee-or-not, comments, open/closed) via the bot/service
-   credential (§3.3) — a **read-only proxy**, not a direct client-side GitHub call — and returns a sanitized
-   view to the frontend. "Sanitized" mainly means: the reporter's own email was never stored in GitHub in the
-   first place (§3.3), so there's nothing to scrub on that front. The view is cached for 30 seconds per token
-   (§4.5), so refreshing the page doesn't spend the Bot's GitHub quota.
-4. Frontend renders the status/history view: current status, category/location, timeline of
-   labels/comments/assignment. The report itself (title, body, labels) is not editable from this page; the
-   only write the reporter has is adding comments (below). Comments the reporter posted are visually
-   distinguished from staff comments.
+3. Function reads the issue and its paginated timeline via the Bot (§3.3), a **read-only proxy**; the Reporter
+   never calls GitHub directly. Timeline responses already contain comments, so no separate comments fetch is
+   required. Follow pagination rather than silently truncating history. Construct the explicit public projection
+   below, defined alongside the API contract in `shared/`; new GitHub fields are private by default. Cache it for
+   30 seconds per token (§4.5), so a refresh loop does not repeatedly spend the Bot's GitHub quota.
+4. Frontend renders current details and the allowed progress/comment timeline. The Report's title, body and
+   classification are not editable here. Reporter comments are distinguished from Staff comments; commenting
+   and Reissue are the only writes this surface offers.
+
+**Status-page field allowlist**
+([Status views, neutralization and failure paths](https://github.com/Pergo911/github-issue-tracker/issues/18)):
+
+- Report number, current title, decoded body content (including Exact place), Category and Location; current
+  Status or the invalid-Status fallback; open/closed state and close reason; creation/update/close timestamps.
+- Assigned/unassigned **only**, never who is assigned.
+- Comments: plain text, timestamps and `author: "reporter" | "staff"`. Decode the canonical Reporter envelope
+  only after authenticating its Bot authorship; render other comments as plain text, never GitHub HTML.
+- History: Status, close/reopen, Category, Location and assignment-presence changes with timestamps, stripped
+  of actor identities. Include only these event types; do not forward cross-references or nested source issues.
+  It is progress history, not a complete title/body edit-revision archive. Any displayed comment count is derived
+  from the visible comments, not a raw GitHub object or a count of filtered events.
+
+Never return Priority, unrelated labels, structured assignee/comment-author/actor identities, GitHub logins,
+avatars, profile/issue URLs, machine correlation metadata, or raw GitHub objects. Allow only the fields above;
+do not rely on deleting known-sensitive keys from an otherwise unrestricted payload. This removes **structured**
+identity data, not names or URLs Staff choose to write in free text; Staff discipline still applies below.
+
+**Neutralizing body/comment text: canonical dynamic fences.** Let `F` be a zero-indented run of
+`max(3, longest backtick run in the input + 1)` backticks, without a language/info string. Wrap a body field as
+`F + "\n" + text + "\n" + F`; a Reporter comment is `"**Reporter:**\n\n" +` that envelope. The trusted marker is
+outside the code block, never localized. No input backtick run can close this fence. Do not replace it with
+a fixed triple-backtick wrapper, generic backslash escaping, HTML entities or a Markdown-rendering pipeline.
+
+Decode the **raw API body**, requiring the exact canonical envelope (including re-encoding equality), not
+`body_html`/`body_text`; remove only the wrapper's deliberately added newline. Literal entities and embedded
+Reporter-marker text remain the submitted text. GitHub renders the fields as code blocks; both SPA surfaces
+render the decoded text normally, without a monospace requirement. A noncanonical/Staff-edited body falls back
+to plain text, not guessed unescaping or active Markdown.
+
+Reporter attribution requires the expected Deployment Bot's numeric identity, login and `type: Bot` **and** the
+canonical Reporter envelope. A Staff-authored lookalike is still Staff. Pin Bot identity from the App during
+Deployment setup, never from a claimed marker or untrusted comment. `performed_via_github_app` may be null;
+absence is not disqualifying and present conflicting App metadata fails closed. The dashboard uses the same
+runtime-neutral classifier/decoder from `shared/`, with expected Bot identity supplied through role-gated Worker
+metadata to any Staff role. Reporters receive only the computed attribution, never that identity metadata.
+
+The [live installation-token spike](https://github.com/Pergo911/github-issue-tracker/issues/18#issuecomment-6261841183)
+validated raw round-trips, actual fenced rendering, attribution and mention/reference controls for the tested
+body/comment corpus. Raw Bot mentions **did** notify. Fenced mention/reference suppression is bounded evidence
+from that run, not a guarantee of permanent email non-delivery or suppression of ordinary subscriber notifications.
+Titles have the separate, not-yet-live-validated input policy in §4.1.
 
 **Reporter comments** (requirement from the instructor): a reporter can add comments to their own
 report from the status page.
@@ -748,13 +860,10 @@ report from the status page.
 2. Function resolves `status-token → issue#` in KV (unknown token → the same generic 404), applies the per-token
    and per-IP limits of §4.5 (the page is a public write endpoint, so this matters more than for reads), and
    enforces 1–2,000 characters after trimming. A posted comment evicts the cached view.
-3. Function posts the comment to the issue via the bot credential (§3.3), with the text prefixed by the
-   fixed marker `**Reporter:**` — never localized; it is a protocol string the matcher reads (§2.5) — since
-   the comment's GitHub author is the bot. The status-lookup function uses that marker to tell reporter
-   comments from staff comments when building the timeline; the status page and the dashboard strip it and
-   render a localized label instead, while GitHub keeps the raw marker for Staff (§2.5). The text is posted as plain text with `@mentions` and markdown/HTML
-   neutralized, so a reporter can't ping arbitrary GitHub users or inject content. **No email address is
-   written into the comment**, preserving the §3.3 invariant.
+3. Function posts via the Bot (§3.3) using the canonical dynamic-fence envelope above and the fixed
+   `**Reporter:**` marker (§2.5). The status-lookup function and dashboard authenticate Bot authorship, decode
+   the raw envelope and render the localized Reporter label. Embedded markers cannot change attribution.
+   **No Reporter contact email is added to the comment**, preserving the §3.3 invariant.
 4. The webhook receiver never sees the resulting `issue_comment` event, since it subscribes to `issues` only
    (§4.2). Staff notification is **dashboard-only** (§7 item 15a): no system email is ever sent on a reporter
    comment — no seventh template (§4.6) burning the shared email budget (§4.5), and no `issue_comment`
@@ -764,7 +873,7 @@ report from the status page.
    outlives the close (links never expire), so the comment box stays reachable; the status page shows a notice
    there: a closed Report doesn't reopen on a comment, and a recurrence should be filed as a new Report. Reopen
    stays a Staff action (GitHub or the dashboard), so it keeps the `reopened` Major-change email and the
-   dashboard's `initial`-status application (§4.2) — the Worker never reopens and never applies `initial`. A
+   dashboard's `initial`-status application (§4.2) — the Worker never reopens or applies `initial` on reopen. A
    reporter-side "not fixed" reopen action is the documented upgrade path if staff miss late comments.
 6. **Comments are append-only** (§7 item 15d): a reporter cannot edit or delete a comment. "Their own" is not a
    notion the system has — the marker doesn't say who commented, and any link holder can post — so edit/delete
@@ -783,7 +892,8 @@ per-token comment budget (§4.5) bounds the noise until then.
 2. **Staff** (Triage or better, the same gate as reveal-contact, §4.4): a dashboard action, uncapped, for
    offboarding or a leak reported by phone.
 
-The function mints a new token, writes `status-token:<new>`, updates `issue-token:<issue#>`, deletes
+Through the Report gate's lifecycle coordination (§4.1), the function mints a new token, writes
+`status-token:<new>`, updates `issue-token:<issue#>`, deletes
 `status-token:<old>`, and emails the new link (§4.6) to the Reporter's address in KV. **The new link is never returned to
 the caller**, so whoever holds a leaked link can end their own access but can't take over the Report. The old link
 behaves like any unknown token (generic 404, step 2). KV is eventually consistent, so the old link can keep
@@ -798,8 +908,8 @@ actually run into a case where they want a private back-channel on a specific re
 
 ### 4.4 Staff contact lookup and link resend (gated)
 
-Because the reporter's email lives only in KV, staff who need to contact a reporter directly (e.g. to schedule
-building access), or who need to resend a lost status link, can't get either from the issue itself. A small
+Because the Reporter's durable contact mapping lives in KV, not GitHub, Staff who need contact details (e.g. to
+schedule building access) or a lost Status link cannot get either from the issue itself. A small
 **reveal-contact** function, gated by checking the caller's repo role (using the staff member's own GitHub token
 from device-flow login, §2.2), looks up the email and/or status link from KV and returns it, along with the
 Allowlist entry's `note` while the address is still listed. This keeps both lookups auditable/controllable in one
@@ -824,7 +934,7 @@ read before any object exists, so an attacker can't mint objects. Per-IP bursts 
 | Resend cooldown      | 60 seconds per email                                                                            |
 | Wrong guesses        | 5 per code, then the code is burned and a new one must be requested                             |
 | Codes per email      | 5 per hour and 10 per day                                                                       |
-| Codes per Deployment | 50 per day, a configuration value (Resend's free tier is 100 emails a day, shared with notifications) |
+| Codes per Deployment | 40 per day by default, configurable (Resend's free tier is 100 emails a day, shared with other mail) |
 
 A targeted address therefore allows at most 50 guesses a day (10 codes of 5 guesses) against 10⁶ combinations,
 under 0.005%. The OTP-request response never depends on the email (§4.1), so the cooldown and per-email caps are
@@ -836,6 +946,7 @@ silent and only the per-IP and Deployment-wide limits can answer 429.
 | ----------------- | ---------------- | ----------------------------------------------------------- |
 | OTP request       | 5/min            | the code caps above                                         |
 | Verify and submit | 10/min           | 5 wrong guesses per code                                    |
+| Resume submission | 10/min           | valid unguessable attempt credential; reads/resumes only that attempt |
 | Status lookup     | 20/min           | 6/min per token (binding)                                   |
 | Add comment       | 6/min            | 3/min per token (binding), 20/day per Report (Durable Object) |
 | Reissue (holder)  | none             | 3/day per Report (Durable Object)                           |
@@ -846,10 +957,15 @@ for 30 seconds per token in the Workers Cache API (no KV writes) and evicted by 
 (best-effort: the Cache API deletes per data centre, so another edge can serve the stale view out its TTL —
 accepted, like KV's eventual consistency), so a refresh loop can't drain the Bot's shared GitHub quota.
 
-**Free-tier budgets are design constraints.** Resend allows 100 emails a day and 3,000 a month, and the 50-a-day
-code budget leaves the other half for confirmations, Major-change mail and reissue mail. KV allows 1,000 writes a
-day: a Report costs about six (`issue-email`, `status-token`, `issue-token`, and a dedupe key per Major change), so
-counters and caches never go in KV, and a bulk Allowlist add is capped at 500 per request.
+**Free-tier budgets are design constraints.** Resend allows 100 emails a day and 3,000 a month. The default
+40-code budget plus 40 confirmations nominally leaves 20 sends for Major-change and Reissue mail. This is
+headroom, not reserved capacity or a delivery guarantee: bursts, retries and confirmations from a previous day's
+codes can still exhaust the quota. No per-send remaining-quota probe is added. Email failures are logged and
+best-effort; a failed Major-change email is not replayed merely because its dedupe key already exists, and a
+failed confirmation does not fail a stored Report. The Status link remains authoritative. Forty is the default,
+not a newly fixed maximum on configuration. KV allows 1,000 writes a day: a healthy Report costs about six
+(`issue-email`, `status-token`, `issue-token`, and a dedupe key per Major change), with repair writes additional,
+so counters/recovery state/caches never go in KV, and a bulk Allowlist add is capped at 500 per request.
 
 **No CAPTCHA in the MVP.** The daily budget bounds Resend burn. The known cost is that a determined attacker can use
 up the day's codes, which blocks code requests until 00:00 UTC; add Cloudflare Turnstile to the OTP request if that
@@ -859,9 +975,9 @@ happens in practice.
 
 Every email the system sends is **plain text only** — Resend's `text` field, no `html` part
 ([ticket](https://github.com/Pergo911/github-issue-tracker/issues/10)). The payload is always a few factual lines
-plus the Status link, and Reporter-controlled text (the title, the description) flows into the templates, so plain
-text has zero escaping and injection surface: a title containing HTML, or a forged `Reporter:` marker, cannot
-render as anything. It reads fine in every client, and there is no HTML part to trip spam penalties. A Deployment
+plus the Status link. Reporter-controlled titles flow into the templates, never the description. Plain text has
+no app-authored HTML interpretation or HTML-escaping step; email clients may still auto-link text. It reads fine
+in every client, and there is no HTML part to trip spam penalties. A Deployment
 that later wants HTML adds it per template — additive, not architectural.
 
 **Sender.** From is `<local>@<the verified mail. subdomain>` (§3.1). The **local part**, the **display name** and
@@ -923,12 +1039,12 @@ Template strings are per-Deployment configuration, authored in the Deployment's 
 | `webhook-seen:<delivery-id>` | `true`                      | ~1 day                       | idempotency guard, written only for Major changes (§4.2)             |
 | `config`                      | `<the Deployment configuration, JSON>` | none (System-admin edited) | every per-Deployment value the form, dashboard and email send read (§2.4; the SPA is served only its public projection), including the UI language and timezone (§2.5) |
 
-**Durable Objects** (SQLite-backed) hold the state that needs atomic updates (§4.5):
+**Durable Objects** (SQLite-backed) hold atomic gates, submission recovery and lifecycle coordination (§4.1, §4.5):
 
 | Object (named by)                          | State                                                                       | Purpose                                         |
 | ------------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------------- |
-| Email gate (SHA-256 of the normalized email) | current code `{hash, expiresAt, wrongGuesses}`, last-sent time, hourly and daily code counts | issue and verify codes, cooldown, per-email caps |
-| Report gate (the issue number)             | daily comment count, daily reissue count                                    | per-Report comment and reissue budgets          |
+| Email gate (SHA-256 of the normalized email) | code `{hash, expiresAt, wrongGuesses}`, last-sent time, hourly/daily counts; pending submission with temporary email/payload, credential hash, fingerprint, marker, fixed token, dispatch phase/issue number; 24-hour completion receipts | OTPs and caps; atomic consume-and-record; resumable submission |
+| Report gate (the issue number)             | daily comment/reissue counts; finalization progress, token generation/lifecycle, associated pending-attempt locator while needed, deletion tombstone | budgets; serialize mapping recovery, Reissue and Erasure |
 | Global gate (one per Deployment)           | codes issued today                                                          | the Deployment-wide code budget                 |
 
 **Allowlist maintenance.** A System admin (repo Admin role, checked as in §4.4) manages the Allowlist from a screen
@@ -941,7 +1057,8 @@ reveal-contact, and never written to GitHub, an email or an issue body. Addition
 about a minute (KV propagation, which also caches "not found").
 
 - **Offboarding.** Removing an entry only stops new codes. The leaver's existing Reports, mappings and links stay
-  until the Reports close, and notifications continue; Staff can reissue a link to cut access (§4.3).
+  for the life of the Report, including after close, and notifications continue; Staff can reissue a link to cut
+  access (§4.3). Already verified submission recovery is not a new code request.
 - **Change of address.** Add the new address and remove the old one. Old Reports keep mailing the old address, and
   Staff can hand the link over from reveal-contact (§4.4).
 - **Mistyped address.** There is no recovery path: the generic OTP response can't say why a code didn't arrive, so
@@ -956,22 +1073,25 @@ about a minute (KV propagation, which also caches "not found").
   closed Reports (§4.4).
 - **Erasure is deletion of the Report, done by a System admin.** A Reporter asking for their data to be removed is
   erased Report by Report: a System admin (repo Admin) deletes the issue in the GitHub UI — the GitHub Organization
-  must enable issue deletion for its repositories, a setup step (§8) — the `deleted` webhook purges the three
-  mappings (§4.2), and the Allowlist entry with its `note` is removed from the screen. The Report and its comments
-  leave GitHub entirely; nothing Reporter-linked stays in KV. The Report gate (the comment and reissue counters,
-  named by the issue number) is not purged — GitHub never reuses an issue number, so its counters go idle with the
-  Report; a strict-obligations Deployment may clear its storage in the same step.
+  must enable issue deletion for its repositories, a setup step (§8) — the `deleted` webhook coordinates with
+  the Report gate to tombstone the issue, cancel associated recovery/receipts and purge the three mappings (§4.2).
+  Remove the Allowlist entry with its `note` from the screen. The Report and comments leave GitHub; nothing
+  Reporter-linked stays in KV, and delayed repair cannot recreate the mappings. Clear sensitive recovery payloads,
+  credentials/receipts and their locators; inert issue-number counters and a deletion tombstone can remain because
+  GitHub never reuses an issue number. A not-yet-linked pending attempt is located by the supplied email/reference
+  and explicitly discarded as part of the request, not left outside the erasure procedure.
 - **Erasure is per-Report, by design.** There is no `email → issue#s` reverse index — a fourth place each address
   would live, for a problem the reference Deployment doesn't have. A "remove everything about me" request names
   their Reports (each one's confirmation email carries its number), Staff erase each in turn, and a real
   Deployment's operator can list and scan `issue-email:*` in KV offline as the completeness net. A dashboard erase
   button (the Bot calling GitHub's GraphQL `deleteIssue` mutation — there is no REST endpoint for deleting an
   issue — behind a small spike confirming the installation token may call it) and a purge-contact-only variant are additive upgrade paths for a real Deployment.
-- **The per-email Durable Object needs no lifecycle management.** It is named by a SHA-256 of the normalized
-  address and holds a code hash with expiry and guess count, a last-sent time, and rolling hourly/daily counters —
-  no plaintext, nothing purgeable, and codes expire in 10 minutes (§4.5). A Deployment with strict obligations can
-  add an erasure-time purge action (compute the object's name from the address, clear its storage) with no design
-  change.
+- **Submission recovery has an explicit lifecycle.** Although the Email gate's name is an email hash, it holds
+  the verified plaintext email and Report payload while recovery is pending (§4.1). Drop the payload on completion,
+  remove completion receipts after 24 hours, and clear pending/receipt data on explicit discard or Erasure. Never
+  silently expire the only record of an unresolved create. The remaining OTP hash expires in 10 minutes and
+  counters can go idle. Cleanup is logical deletion: SQLite-backed DO point-in-time recovery can retain historical
+  contents for up to 30 days; do not promise immediate disappearance from provider recovery history.
 - **Two accepted boundaries sit outside this system.** Resend retains sent email content on its side for about 30
   days — only the six templates ever sent (§4.6), carrying at most a title and the Status link, never the
   description — and it self-expires. Replies to the configured reply-to mailbox land in the Organization's own mail
@@ -1015,7 +1135,10 @@ notifications on major changes, without granting them the broad repo visibility 
 
 ---
 
-## 7. Open items / decisions still needed
+## 7. Decision register
+
+No open design items remain for this map. Implementation validation and its accepted risks are recorded in the
+relevant design sections; they are not claims that the application already exists or that every policy is live-tested.
 
 1. **"Asztali alkalmazás" requirement** — **resolved.** A web-only deliverable isn't acceptable,
    so the design ships one SPA wrapped by a thin Windows-only Electron shell (§2.1). Staff login moved to
@@ -1085,7 +1208,7 @@ notifications on major changes, without granting them the broad repo visibility 
     Reporter-written title (3–80 characters after trim), a description (1–4,000) and the optional exact place
     (1–100); no identity or contact fields, no photos in the MVP (the undocumented `uploads.github.com` endpoint
     is rejected; a Worker-fronted R2 bucket is the upgrade path). The issue body is a fixed template, and all
-    Reporter free text enters GitHub under the §4.3 neutralization (§4.1, §6,
+    Reporter body/comment text is dynamically fenced; titles use the restricted-input policy (§4.1, §4.3, §6,
     [ticket](https://github.com/Pergo911/github-issue-tracker/issues/13)).
 18. **Staff dashboard scope** — **resolved.** Three dashboard tiers over the repo `permissions` object —
     Viewer (Read; views and comments only), Maintenance staff (Triage or better; all Report actions) and System
@@ -1101,8 +1224,8 @@ notifications on major changes, without granting them the broad repo visibility 
     nothing, there is no time-based purge, and links never expire. Erasure is Report deletion by a System admin in
     the GitHub UI (the Organization enables issue deletion), with the `deleted` webhook purging the three mappings
     and the Allowlist entry removed on its screen; erasure is per-Report — no reverse `email → issue#s` index (the
-    requester names their Reports; ops can scan KV offline). The per-email Durable Object needs no lifecycle
-    management (hash name, counters, nothing purgeable), and Resend's ~30-day content retention plus the reply-to
+    requester names their Reports; ops can scan KV offline). Pending recovery and receipts are explicitly purged
+    under the lifecycle in §4.1 and §5. Resend's ~30-day content retention plus the reply-to
     mailbox's copies are accepted boundaries outside the system (§5,
     [ticket](https://github.com/Pergo911/github-issue-tracker/issues/15)).
 20. **UI and email language** — **resolved.** One configured language per Deployment, chosen from the
@@ -1125,28 +1248,33 @@ notifications on major changes, without granting them the broad repo visibility 
     light or dark mode (§2.1, §2.3–§2.7, Appendix A,
     [ADR 0004](./docs/adr/0004-primer-is-the-source-of-the-look-not-a-dependency.md),
     [ticket](https://github.com/Pergo911/github-issue-tracker/issues/17)).
-22. **Status views, neutralization and failure paths** — **open.** The pre-commit comprehensive check (after all
-    other tickets closed) surfaced six decisions the map hadn't covered: the status-page view contract (§4.3),
-    the neutralization mechanism for Reporter free text (§4.1, §4.3), an open Report with no Status after a
-    github.com reopen or a hand-removed label (§2.3, §2.4), submission atomicity on partial failure (§4.1), the
-    data source for the reporter-comment filter and sort (§2.4), and Resend budget exhaustion (§4.5). Filed as one
-    last ticket before implementation planning
-    ([ticket](https://github.com/Pergo911/github-issue-tracker/issues/18)).
+22. **Status views, neutralization and failure paths** — **resolved.** Explicit Status-page projection and progress
+    timeline (§4.3); canonical dynamic fences with Bot-authenticated Reporter attribution (§4.1, §4.3); restricted
+    titles, preserving accepted input without silent rewriting; visible invalid-Status fallback, never auto-repair
+    (§2.4); durable resumable submissions with manual handling of uncertain creates, no exactly-once claim
+    (§4.1, §5, [ADR 0005](./docs/adr/0005-recover-submissions-without-retrying-uncertain-creates.md)); lazy paginated
+    repository-comment scans for the dashboard affordances (§2.4); 40-code default with best-effort mail (§4.5).
+    The human accepted title-alphabet validation/adjustment during implementation rather than another spike;
+    the live evidence proves the tested body/comment properties, not the title policy
+    ([Status views, neutralization and failure paths](https://github.com/Pergo911/github-issue-tracker/issues/18)).
 
 ---
 
 ## 8. Next steps
 
 1. Delivery format is decided: Electron shell around the hosted SPA (§2.1). The device-flow spike (§7
-   item 13) passed for both app types; no fallback is needed.
+   item 13) passed for both app types; no fallback is needed. The wayfinder map is complete: begin implementation
+   planning, not another design-ticket round. Verify the restricted title policy during implementation (§4.1);
+   the body/comment spike asset stays throwaway and unmerged.
 2. Stand up the reference Deployment's GitHub Organization and `reports` repo, enable issue deletion for its
    repositories (the erasure lever, §5).
 3. Verify the reference Deployment's sending subdomain with Resend: add the generated SPF/DKIM/DMARC records for
    `mail.berautoapp.hu` in the `berautoapp.hu` zone at Rackhost (§7 item 3).
 4. Register the two GitHub Apps (Bot and staff) for the reference Deployment and provision the Bot's
    installation credential (§3.3, §2.2).
-5. Scaffold `app/` (§2.6), then implement the edge functions and the Durable Object gate classes (§4.5) in
-   `app/src/worker/`, with submission as the critical path: OTP request → OTP verify-and-submit (issue creation) →
+5. Scaffold `app/` (§2.6), then implement the edge functions and Durable Object gate classes (§4.5) in
+   `app/src/worker/`, with submission as the critical path: OTP request → atomic OTP consume/pending attempt →
+   recoverable issue creation and KV finalization → credential-gated resume →
    status-lookup → add-comment → webhook receiver → staff device-flow proxy → reveal-contact/resend-link/reissue →
    Allowlist management.
 6. Build the SPA's three surfaces in `app/src/client/`: submission form, status page, staff dashboard, in GitHub's

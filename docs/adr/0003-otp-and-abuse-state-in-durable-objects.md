@@ -13,3 +13,6 @@ The OTP record, wrong-guess counts, per-email caps, the Deployment-wide email bu
 - Per-IP and per-token bursts still use the Rate Limiting binding, and are casual-abuse quality by design.
 - Objects are named by a hash of the address, never the raw email, and an unlisted address is rejected by the KV Allowlist read before any object exists, so an attacker can't mint objects.
 - Each Deployment's Worker configuration gains one Durable Object binding and migration per gate class (email, Report, global).
+- The same Email and Report gates also hold recoverable-submission and mapping-lifecycle state
+  ([ADR 0005](./0005-recover-submissions-without-retrying-uncertain-creates.md), SPEC §4.1). Pending recovery can
+  contain the plaintext email/payload; a hashed object name does not remove that data's cleanup obligations.

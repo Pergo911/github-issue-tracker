@@ -10,6 +10,7 @@ Each Deployment declares its Taxonomy (the values of Category, Location, Priorit
 ## Consequences
 
 - Adding or renaming a value is a configuration change plus a sync, done by a System admin, not a label edit on github.com.
-- A label edited or deleted by hand on github.com stays that way until the next sync. The form and dashboard are unaffected because they read configuration.
+- A label edited or deleted by hand on github.com stays that way until the next sync. Form choices and dashboard
+  Taxonomy still come from configuration; an affected Report uses SPEC §2.4's display/invalid-Status fallback.
 - The sync creates missing labels with the configured colour and corrects the colour of existing ones (colour only, never names), so a colour edited by hand on github.com reverts at the next sync.
 - The sync is the Configuration save (SPEC §2.4): the Worker diffs the configuration against the repo's labels and creates or recolours them on every Admin save. Only its packaging as standalone tooling is implementation, out of scope for this design (ADR 0001 leaves Deployment tooling to implementation).
