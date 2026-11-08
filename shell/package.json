@@ -1,0 +1,32 @@
+{
+  "name": "fault-reports-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Windows desktop shell: Electron around the hosted SPA, built once per Deployment (SPEC 2.1).",
+  "author": "Fault reports",
+  "main": "src/main.cjs",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "electron .",
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:unit": "node --test test/unit/",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:installer": "node scripts/installer-check.ts",
+    "verify": "node scripts/verify.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "26.6.6",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3"
+  },
+  "type": "module"
+}

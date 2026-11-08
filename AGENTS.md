@@ -6,8 +6,8 @@ This file provides guidance to coding agents when working with code in this repo
 
 A **fault-reporting and maintenance-tracking system** ("Hibabejelentő és karbantartás-kezelő rendszer") for a
 building (társasház), institution, or organization, with reporter, maintenance-staff, and admin roles. This
-repository is where the product lives: the design documents, and `app/` (the SPA and the Worker). `shell/`
-(the Electron wrapper) arrives with ticket #31. The original requirements brief is in Hungarian in
+repository is where the product lives: the design documents, `app/` (the SPA and the Worker) and `shell/` (the
+Windows Electron wrapper). The original requirements brief is in Hungarian in
 [`Ticket Management System Feladatleírás.md`](./Ticket%20Management%20System%20Feladatleírás.md). It
 deliberately leaves the exact roles, permissions, categories, priorities, statuses, and stored data open;
 `SPEC.md` records the decisions.
@@ -150,6 +150,24 @@ may use a fixed port or shared global state:
   servers stay on the host and the container's browser reaches them through Playwright's tunnel.
 - Run one `verify` per worktree at a time (the type check and the compile-boundary tests share `.tsbuild/`).
 - Stop a server by its PID. Killing every `node.exe` or `workerd.exe` takes down the other worktrees' servers.
+
+## Working in `shell/`
+
+`shell/` is its own npm package (Electron and electron-builder pinned exactly) and shares no code with `app/`. Run
+everything from `shell/`; [`shell/README.md`](./shell/README.md) has the detail.
+
+- **Dev loop:** start `app/` (`npm run seed`, then `npm run dev`), then `APP_URL=http://localhost:5173 npm start`
+  in `shell/`. A packaged build accepts HTTPS only; an unpackaged run also accepts `http://localhost`.
+- **Build for a Deployment:** `APP_URL=https://<deployment> npm run build` makes the unsigned per-user installer and
+  the portable exe in `shell/dist/`. `APP_ID` and `PRODUCT_NAME` override the app identity per Deployment.
+- **Checks:** `npm run verify` (typecheck, Prettier, unit tests, Electron-driver tests against `app/`'s real dev
+  server, which must be installed with `npm ci`). `npm run test:installer` (or `verify -- --installer`) builds the
+  installer, installs it silently, launches the installed app, screenshots it and uninstalls it: slow, Windows
+  only, so run it when you touch packaging or the main process, not on every change. The same parallel-run rules
+  apply: free ports, a private state directory under `shell/.tmp/`, stop servers by PID.
+- **Conventions:** the main process is plain CommonJS (`src/*.cjs`, type-checked with JSDoc), no preload script, no
+  Node integration, no shell-specific code in the SPA. New navigation or window behaviour comes with a test in
+  `shell/test/electron/`.
 
 ## Documents
 
