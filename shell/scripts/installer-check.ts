@@ -265,7 +265,12 @@ try {
   }
   proxy?.close();
   if (appServer?.pid) killTree(appServer.pid);
-  rmSync(workDir, { recursive: true, force: true });
+  // The dev server was killed a moment ago: Windows may hold its files for a little longer.
+  try {
+    rmSync(workDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
+  } catch {
+    console.warn(`Could not remove ${workDir}; delete it by hand.`);
+  }
 }
 
 if (failure) {
