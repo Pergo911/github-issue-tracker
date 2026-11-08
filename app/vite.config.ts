@@ -18,6 +18,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     cloudflare({
+      // The plugin keeps its state in <path>/v3; scripts/lib/state.ts seeds into the same folder.
       persistState: { path: process.env["PERSIST_DIR"] ?? ".wrangler/state" },
       inspectorPort,
     }),

@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:worker": "vitest run --project worker",
+    "test:tooling": "vitest run --project tooling",
     "test:e2e": "node scripts/e2e.ts",
     "seed": "node scripts/seed.ts",
     "reset": "node scripts/reset.ts",

@@ -29,8 +29,17 @@ export default defineConfig({
             "src/shared/**/*.test.ts",
             "src/client/**/*.test.{ts,tsx}",
             "eslint-rules/**/*.test.ts",
-            "scripts/**/*.test.ts",
           ],
+        },
+      },
+      {
+        // Tests of the repo's own tooling. They start a local Workers runtime, so they are slower than `unit`.
+        extends: true,
+        test: {
+          name: "tooling",
+          environment: "node",
+          include: ["scripts/**/*.test.ts"],
+          testTimeout: 60_000,
         },
       },
       {
