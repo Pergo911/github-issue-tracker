@@ -1,0 +1,5 @@
+# Copy to .dev.vars (git-ignored). Local development reads only the keys listed under `secrets.required`
+# in wrangler.jsonc. The fake GitHub and fake Resend (ticket #22) accept any non-empty value here.
+RESEND_API_KEY=re_local_development_key
+BOT_APP_PRIVATE_KEY=local-development-placeholder
+GITHUB_WEBHOOK_SECRET=local-development-webhook-secret

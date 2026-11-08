@@ -1,0 +1,59 @@
+// The one committed Wrangler configuration: one Deployment unit (SPEC 2.6, ADR 0001). No `env` blocks.
+// Whoever deploys a different Deployment edits the `vars` and creates their own resources.
+// Ticket #20 (the human) supplies the real reference-Deployment values marked REPLACE_*.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fault-reports",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-11-01",
+
+  // Static assets: the Vite client build. Everything the Worker serves lives under /api/ (the webhook and the
+  // device-flow proxy included), so /status/<token> and /staff/... are plain assets that never invoke the Worker.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Non-secret deploy-time values (SPEC 2.6). Never shown on a screen (SPEC 2.4).
+  "vars": {
+    "GITHUB_ORG": "REPLACE_GITHUB_ORGANIZATION",
+    "GITHUB_REPO": "reports",
+    "RESEND_FROM_DOMAIN": "mail.berautoapp.hu",
+    "APP_URL": "https://REPLACE_WORKERS_DEV_ADDRESS",
+    "BOT_APP_ID": "REPLACE_BOT_APP_ID",
+    "BOT_INSTALLATION_ID": "REPLACE_BOT_INSTALLATION_ID",
+    "STAFF_APP_CLIENT_ID": "REPLACE_STAFF_APP_CLIENT_ID",
+  },
+
+  // Secrets are Worker secrets. A deploy fails when one is missing; local dev reads the git-ignored .dev.vars
+  // (copy .dev.vars.example). The staff app uses device flow, so it has no secret (only a client id above).
+  "secrets": {
+    "required": ["RESEND_API_KEY", "BOT_APP_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"],
+  },
+
+  // Workers KV: write-once or read-mostly state (SPEC 5). Created by hand; paste the id of your namespace.
+  // The id is not used by local dev, which keeps its KV inside .wrangler/ in this worktree.
+  "kv_namespaces": [{ "binding": "KV", "id": "REPLACE_KV_NAMESPACE_ID" }],
+
+  // The three gates (SPEC 4.5, 5, ADR 0003): SQLite-backed Durable Objects, one class each.
+  "durable_objects": {
+    "bindings": [
+      { "name": "EMAIL_GATE", "class_name": "EmailGate" },
+      { "name": "REPORT_GATE", "class_name": "ReportGate" },
+      { "name": "GLOBAL_GATE", "class_name": "GlobalGate" },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["EmailGate", "ReportGate", "GlobalGate"] }],
+
+  // Rate Limiting bindings for the per-IP and per-token bursts of SPEC 4.5. Periods can only be 10 or 60
+  // seconds; the counts are per Cloudflare location. namespace_id must be unique within your Cloudflare account.
+  "ratelimits": [
+    { "name": "RL_OTP_REQUEST_IP", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } },
+    { "name": "RL_VERIFY_IP", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_RESUME_IP", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_STATUS_IP", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } },
+    { "name": "RL_STATUS_TOKEN", "namespace_id": "1005", "simple": { "limit": 6, "period": 60 } },
+    { "name": "RL_COMMENT_IP", "namespace_id": "1006", "simple": { "limit": 6, "period": 60 } },
+    { "name": "RL_COMMENT_TOKEN", "namespace_id": "1007", "simple": { "limit": 3, "period": 60 } },
+  ],
+}
