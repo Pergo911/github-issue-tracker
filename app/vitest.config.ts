@@ -38,6 +38,8 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
+          // Generating an RSA key (the fakes' tests do) takes seconds on a loaded machine, as `verify` makes it.
+          testTimeout: 30_000,
           include: [
             "src/shared/**/*.test.ts",
             "fakes/**/*.test.ts",
