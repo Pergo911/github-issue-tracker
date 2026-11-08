@@ -101,13 +101,14 @@ describe("registerEndpoint", () => {
   });
 
   it("answers internal_error for an unexpected failure and never leaks its message", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { app } = buildApp();
     const response = await app.request("/api/greet?name=Boom");
     expect(response.status).toBe(500);
     const body = await json(response);
     expect(body).toEqual({ error: { code: "internal_error" } });
-    expect(console.error).toHaveBeenCalled();
+    expect(JSON.stringify(body)).not.toContain("secret detail");
+    expect(logged).toHaveBeenCalled();
   });
 
   it("answers JSON that must not be cached", async () => {
