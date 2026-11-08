@@ -8,7 +8,9 @@ import { callApi } from "@/api/call-api.ts";
  */
 export const publicConfigQuery = queryOptions({
   queryKey: ["config", "public"],
-  queryFn: ({ signal }) => callApi(endpoints.publicConfig, undefined, { signal }),
+  // No abort signal on purpose: the boot request must run to completion, and React StrictMode's second mount
+  // in development would otherwise cancel it and send it again.
+  queryFn: () => callApi(endpoints.publicConfig),
   retry: false,
   retryOnMount: false,
   staleTime: 5 * 60_000,

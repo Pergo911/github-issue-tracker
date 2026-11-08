@@ -29,6 +29,7 @@ export default defineConfig({
             "src/shared/**/*.test.ts",
             "src/client/**/*.test.{ts,tsx}",
             "eslint-rules/**/*.test.ts",
+            "e2e/**/*.test.ts",
           ],
         },
       },
