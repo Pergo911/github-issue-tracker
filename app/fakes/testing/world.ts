@@ -1,20 +1,9 @@
 import { generateAppKeyPair, type AppKeyPair } from "../keys.ts";
 import { createWorld, type World, type WorldOptions } from "../world.ts";
 import { httpClient, worldUrls } from "./api.ts";
+import { TEST_BOT, TEST_ORG, TEST_ORIGIN, TEST_REPO, TEST_STAFF_CLIENT_ID } from "./constants.ts";
 
-/** The fixed Deployment values every test world uses, so tests and Worker variables agree. */
-export const TEST_ORG = "fake-org";
-export const TEST_REPO = "reports";
-export const TEST_ORIGIN = "https://world.test";
-export const TEST_WEBHOOK_SECRET = "test-webhook-secret";
-export const TEST_STAFF_CLIENT_ID = "Iv1.teststaffclient";
-
-export const TEST_BOT = {
-  appId: 424242,
-  clientId: "Iv23litestbotclient",
-  slug: "fault-reports-bot",
-  installationId: 777001,
-} as const;
+export * from "./constants.ts";
 
 let sharedKeys: Promise<AppKeyPair> | undefined;
 

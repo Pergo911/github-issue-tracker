@@ -23,6 +23,11 @@
     "BOT_APP_ID": "REPLACE_BOT_APP_ID",
     "BOT_INSTALLATION_ID": "REPLACE_BOT_INSTALLATION_ID",
     "STAFF_APP_CLIENT_ID": "REPLACE_STAFF_APP_CLIENT_ID",
+    // The services the Worker talks to, as base URLs. These are the real ones; the local world (`vite dev`) and
+    // the Worker tests point them at the fake GitHub and the fake Resend instead (ticket #22).
+    "GITHUB_API_BASE": "https://api.github.com",
+    "GITHUB_WEB_BASE": "https://github.com",
+    "RESEND_API_BASE": "https://api.resend.com",
   },
 
   // Secrets are Worker secrets. A deploy fails when one is missing; local dev reads the git-ignored .dev.vars

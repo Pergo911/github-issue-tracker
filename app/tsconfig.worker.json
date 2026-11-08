@@ -11,6 +11,10 @@
     }
   },
   "include": ["src/worker/**/*", "worker-configuration.d.ts"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
-  "references": [{ "path": "./tsconfig.shared.json" }]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/worker/testing/**/*"],
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    }
+  ]
 }

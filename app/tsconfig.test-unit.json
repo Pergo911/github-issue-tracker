@@ -11,6 +11,15 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["src/shared/**/*.test.ts", "fakes/**/*.test.ts", "src/client/**/*.test.ts", "src/client/**/*.test.tsx"],
-  "references": [{ "path": "./tsconfig.shared.json" }, { "path": "./tsconfig.client.json" }, { "path": "./tsconfig.fakes.json" }]
+  "include": [
+    "src/shared/**/*.test.ts",
+    "fakes/**/*.test.ts",
+    "src/client/**/*.test.ts",
+    "src/client/**/*.test.tsx"
+  ],
+  "references": [
+    { "path": "./tsconfig.shared.json" },
+    { "path": "./tsconfig.client.json" },
+    { "path": "./tsconfig.fakes.json" }
+  ]
 }
