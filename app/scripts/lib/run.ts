@@ -53,7 +53,10 @@ export async function prepareRun(): Promise<Run> {
 }
 
 /** Runs `playwright test` with the given arguments and environment, resolving with its exit code. */
-export function runPlaywright(args: string[], environment: Record<string, string>): Promise<number> {
+export function runPlaywright(
+  args: string[],
+  environment: Record<string, string>,
+): Promise<number> {
   const cli = createRequire(import.meta.url).resolve("@playwright/test/cli");
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cli, "test", ...args], {

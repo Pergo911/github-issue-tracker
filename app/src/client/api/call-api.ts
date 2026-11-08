@@ -24,9 +24,10 @@ export interface CallOptions {
 }
 
 /** The input is optional exactly when an empty object satisfies the schema. */
-type CallArguments<E extends AnyEndpoint> = Record<never, never> extends RequestOf<E>
-  ? [input?: RequestOf<E>, options?: CallOptions]
-  : [input: RequestOf<E>, options?: CallOptions];
+type CallArguments<E extends AnyEndpoint> =
+  Record<never, never> extends RequestOf<E>
+    ? [input?: RequestOf<E>, options?: CallOptions]
+    : [input: RequestOf<E>, options?: CallOptions];
 
 function queryString(input: Record<string, unknown>): string {
   const parameters = new URLSearchParams();
@@ -53,7 +54,7 @@ export async function callApi<E extends AnyEndpoint>(
   if (options?.signal) init.signal = options.signal;
   let url: string = endpoint.path;
   if (endpoint.method === "GET" || endpoint.method === "DELETE") {
-    if (input) url += queryString(input as Record<string, unknown>);
+    if (input) url += queryString(input);
   } else {
     headers.set("content-type", "application/json");
     init.body = JSON.stringify(input ?? {});
@@ -74,7 +75,7 @@ export async function callApi<E extends AnyEndpoint>(
     throw new ApiError("invalid_response", response.status);
   }
 
-  if (response.ok) return body as ResponseOf<E>;
+  if (response.ok) return body;
 
   const failure = apiErrorBodySchema.safeParse(body);
   if (failure.success && isApiErrorCode(failure.data.error.code)) {

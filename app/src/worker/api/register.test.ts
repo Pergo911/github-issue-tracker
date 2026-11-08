@@ -37,7 +37,7 @@ function buildApp() {
 }
 
 async function json(response: Response) {
-  return (await response.json()) as unknown;
+  return response.json<unknown>();
 }
 
 describe("registerEndpoint", () => {

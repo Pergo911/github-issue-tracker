@@ -28,7 +28,11 @@ export function AppLayout() {
           </Link>
         </div>
       </header>
-      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-page px-4 py-6 outline-none md:px-6 md:py-8">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-page px-4 py-6 outline-none md:px-6 md:py-8"
+      >
         <Outlet />
       </main>
     </>

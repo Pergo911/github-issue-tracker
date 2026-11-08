@@ -6,7 +6,7 @@ import { prepareRun, runPlaywright } from "./lib/run.ts";
 
 const extra = process.argv.slice(2);
 const run = await prepareRun();
-let code = 1;
+let code: number;
 try {
   code = await runPlaywright(["--project=chromium", ...extra], run.env);
 } finally {

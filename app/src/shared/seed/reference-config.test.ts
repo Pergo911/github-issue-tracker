@@ -66,7 +66,9 @@ describe("reference Deployment seed (SPEC Appendix A)", () => {
       safety: "d73a4a",
       other: "cfd3d7",
     });
-    expect(new Set(config.taxonomy.location.map((value) => value.color))).toEqual(new Set(["ededed"]));
+    expect(new Set(config.taxonomy.location.map((value) => value.color))).toEqual(
+      new Set(["ededed"]),
+    );
     expect(colours(config.taxonomy.priority)).toEqual({
       low: "c2e0c6",
       normal: "fef2c0",
@@ -99,7 +101,13 @@ describe("reference Deployment seed (SPEC Appendix A)", () => {
   it("puts the Status link into every Report email and the code into the code email", () => {
     const { templates } = config.email;
     expect(templates.otp.body).toContain("{code}");
-    for (const key of ["submissionConfirmation", "closed", "reopened", "statusEntered", "linkReissued"] as const) {
+    for (const key of [
+      "submissionConfirmation",
+      "closed",
+      "reopened",
+      "statusEntered",
+      "linkReissued",
+    ] as const) {
       expect(templates[key].body, key).toContain("{link}");
       expect(templates[key].subject, key).toContain("{number}");
       expect(templates[key].subject, key).toContain("{title}");

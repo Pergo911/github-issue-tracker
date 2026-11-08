@@ -30,7 +30,11 @@ export const referenceConfig = {
       { id: "elevator", name: "Lift", color: "7057ff" },
       { id: "structural", name: "Szerkezeti hiba (fal, tető, padló)", color: "8b6f47" },
       { id: "doors-windows", name: "Ajtók és ablakok", color: "a2eeef" },
-      { id: "common-areas", name: "Közös területek (takarítás, világítás, hulladék)", color: "008672" },
+      {
+        id: "common-areas",
+        name: "Közös területek (takarítás, világítás, hulladék)",
+        color: "008672",
+      },
       { id: "safety", name: "Biztonság (tűz, riasztó, veszélyforrás)", color: "d73a4a" },
       { id: "other", name: "Egyéb", color: "cfd3d7" },
     ],

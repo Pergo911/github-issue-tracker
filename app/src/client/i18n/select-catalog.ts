@@ -16,7 +16,11 @@ export interface CatalogSelection {
  * or English before the configuration is known. The pseudo-language is the exception, a test-only catalog
  * (`?lang=pseudo`) that exists only in a build that enabled it.
  */
-export function selectCatalog({ language, search, pseudoEnabled }: CatalogSelection): PartialCatalog {
+export function selectCatalog({
+  language,
+  search,
+  pseudoEnabled,
+}: CatalogSelection): PartialCatalog {
   if (pseudoEnabled && new URLSearchParams(search).get("lang") === "pseudo") return pseudo();
   return language === undefined ? en : catalogFor(language);
 }

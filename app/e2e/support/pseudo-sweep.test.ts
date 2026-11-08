@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { PSEUDO_MARK_END as end, PSEUDO_MARK_START as start } from "../../src/shared/i18n/pseudo.ts";
+import {
+  PSEUDO_MARK_END as end,
+  PSEUDO_MARK_START as start,
+} from "../../src/shared/i18n/pseudo.ts";
 import { findUnmarked, namesFromAriaSnapshot } from "./pseudo-sweep.ts";
 
 describe("findUnmarked", () => {
@@ -26,7 +29,9 @@ describe("findUnmarked", () => {
   });
 
   it("lets data sit next to catalog text, as in a tab title", () => {
-    expect(findUnmarked([`${start}Staff sign-in${end} – Rózsa Társasház`], ["Rózsa Társasház"])).toEqual([]);
+    expect(
+      findUnmarked([`${start}Staff sign-in${end} – Rózsa Társasház`], ["Rózsa Társasház"]),
+    ).toEqual([]);
   });
 
   it("reports each leak once, trimmed", () => {

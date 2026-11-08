@@ -16,12 +16,20 @@ describe("selectCatalog", () => {
   it("offers the pseudo-language only where a test server enabled it", () => {
     const enabled = selectCatalog({ language: "hu", search: "?lang=pseudo", pseudoEnabled: true });
     expect(enabled["boot.retry"]?.startsWith(PSEUDO_MARK_START)).toBe(true);
-    const disabled = selectCatalog({ language: "hu", search: "?lang=pseudo", pseudoEnabled: false });
+    const disabled = selectCatalog({
+      language: "hu",
+      search: "?lang=pseudo",
+      pseudoEnabled: false,
+    });
     expect(disabled).toBe(hu);
   });
 
   it("applies the pseudo-language to the boot screens too, before any language is known", () => {
-    const catalog = selectCatalog({ language: undefined, search: "?lang=pseudo", pseudoEnabled: true });
+    const catalog = selectCatalog({
+      language: undefined,
+      search: "?lang=pseudo",
+      pseudoEnabled: true,
+    });
     expect(catalog["boot.loading"]?.startsWith(PSEUDO_MARK_START)).toBe(true);
   });
 });

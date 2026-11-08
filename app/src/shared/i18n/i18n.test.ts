@@ -50,7 +50,9 @@ describe("translator", () => {
 
   it("fills typed {name} placeholders", () => {
     const t = createTranslator({ "header.homeLink": "{organization}: kezdőlap" });
-    expect(t("header.homeLink", { organization: "Rózsa Társasház" })).toBe("Rózsa Társasház: kezdőlap");
+    expect(t("header.homeLink", { organization: "Rózsa Társasház" })).toBe(
+      "Rózsa Társasház: kezdőlap",
+    );
   });
 
   it("rejects missing and unknown placeholders at compile time", () => {
@@ -99,8 +101,12 @@ describe("formatter", () => {
   });
 
   it("uses the language's conventions", () => {
-    const hungarian = createFormatter({ language: "hu", timezone: "UTC" }).date(instant("2026-03-10T12:00:00Z"));
-    const english = createFormatter({ language: "en", timezone: "UTC" }).date(instant("2026-03-10T12:00:00Z"));
+    const hungarian = createFormatter({ language: "hu", timezone: "UTC" }).date(
+      instant("2026-03-10T12:00:00Z"),
+    );
+    const english = createFormatter({ language: "en", timezone: "UTC" }).date(
+      instant("2026-03-10T12:00:00Z"),
+    );
     expect(hungarian).toContain("2026");
     expect(hungarian).not.toBe(english);
   });

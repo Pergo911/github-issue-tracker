@@ -9,7 +9,10 @@ for (const screen of referenceScreens()) {
     for (const viewport of VIEWPORTS) {
       const name = `${screen.id}--${scheme}--${viewport.name}`;
       test.describe(name, () => {
-        test.use({ colorScheme: scheme, viewport: { width: viewport.width, height: viewport.height } });
+        test.use({
+          colorScheme: scheme,
+          viewport: { width: viewport.width, height: viewport.height },
+        });
         test("matches its reference image", async ({ page }) => {
           await openScreen(page, screen);
           await page.mouse.move(-1, -1);

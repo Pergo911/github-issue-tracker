@@ -11,7 +11,10 @@ for (const screen of screens) {
   for (const scheme of COLOR_SCHEMES) {
     for (const viewport of VIEWPORTS) {
       test.describe(`${screen.id} ${scheme} ${viewport.name}`, () => {
-        test.use({ colorScheme: scheme, viewport: { width: viewport.width, height: viewport.height } });
+        test.use({
+          colorScheme: scheme,
+          viewport: { width: viewport.width, height: viewport.height },
+        });
         test("is captured", async ({ page }) => {
           if (!directory) throw new Error("SCREENSHOT_DIR is not set; run `npm run screenshots`");
           await openScreen(page, screen);

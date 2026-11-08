@@ -40,7 +40,9 @@ export function createProjection<S extends z.ZodObject, K extends keyof S["shape
 }
 
 type PublicMask = { [K in (typeof PUBLIC_CONFIG_FIELDS)[number]]: true };
-const publicMask = Object.fromEntries(PUBLIC_CONFIG_FIELDS.map((field) => [field, true])) as PublicMask;
+const publicMask = Object.fromEntries(
+  PUBLIC_CONFIG_FIELDS.map((field) => [field, true]),
+) as PublicMask;
 
 /** The shape the public-configuration endpoint returns, and the SPA receives. */
 export const publicConfigSchema = configSchema.pick(publicMask);

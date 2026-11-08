@@ -13,7 +13,8 @@ function temporaryState() {
 }
 
 afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
 });
 
 describe("local state", () => {
@@ -27,7 +28,11 @@ describe("local state", () => {
     const stored = configSchema.parse(await readLocalConfig(state));
     expect(stored.language).toBe("hu");
     expect(stored.timezone).toBe("Europe/Budapest");
-    expect(stored.taxonomy.status.map((value) => value.id)).toEqual(["new", "in-progress", "on-hold"]);
+    expect(stored.taxonomy.status.map((value) => value.id)).toEqual([
+      "new",
+      "in-progress",
+      "on-hold",
+    ]);
   }, 60_000);
 
   it("seeds again without error and keeps one configuration", async () => {
@@ -48,7 +53,9 @@ describe("local state", () => {
   it("refuses to delete a directory that is neither inside this worktree nor a temporary one", () => {
     expect(() => assertDisposable(join(tmpdir(), "..", "..", "Windows"))).toThrow(/refus/i);
     expect(() => assertDisposable("/")).toThrow(/refus/i);
-    expect(() => assertDisposable(join(import.meta.dirname, "..", "..", ".wrangler", "state"))).not.toThrow();
+    expect(() =>
+      assertDisposable(join(import.meta.dirname, "..", "..", ".wrangler", "state")),
+    ).not.toThrow();
     expect(() => assertDisposable(join(tmpdir(), "reports-state-x"))).not.toThrow();
   });
 });

@@ -71,15 +71,14 @@ export type ParsedRequestOf<E extends AnyEndpoint> = z.output<E["request"]>;
 export type ResponseOf<E extends AnyEndpoint> = E["response"];
 /** Every code the endpoint can fail with, as the SPA sees it. */
 export type ErrorCodeOf<E extends AnyEndpoint> =
-  | (keyof E["errors"] & string)
-  | CommonErrorCode
-  | ClientErrorCode;
+  (keyof E["errors"] & string) | CommonErrorCode | ClientErrorCode;
 /** The codes the Worker may send for this endpoint (not the client-only ones). */
 export type WireErrorCodeOf<E extends AnyEndpoint> = (keyof E["errors"] & string) | CommonErrorCode;
 
 export function statusOf<E extends AnyEndpoint>(endpoint: E, code: WireErrorCodeOf<E>): number {
-  const own = endpoint.errors as Record<string, number>;
-  return own[code] ?? COMMON_ERROR_STATUS[code as CommonErrorCode] ?? 500;
+  const own: Record<string, number> = endpoint.errors;
+  const common: Record<string, number> = COMMON_ERROR_STATUS;
+  return own[code] ?? common[code] ?? 500;
 }
 
 /** The body of every error response: `{ "error": { "code": "..." } }`. */

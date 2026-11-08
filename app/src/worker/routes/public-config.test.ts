@@ -27,7 +27,12 @@ describe("GET /api/config/public", () => {
     expect(response.status).toBe(200);
     const text = await response.text();
     expect(JSON.parse(text)).toEqual(toPublicConfig(configSchema.parse(referenceConfig)));
-    for (const privateText of ["templates", "senderLocalPart", "dailyCodeBudget", "gondnok@example.org"]) {
+    for (const privateText of [
+      "templates",
+      "senderLocalPart",
+      "dailyCodeBudget",
+      "gondnok@example.org",
+    ]) {
       expect(text).not.toContain(privateText);
     }
   });

@@ -21,7 +21,7 @@ const create = defineEndpoint({
 
 function stubFetch(handler: (url: string, init: RequestInit) => Response | Promise<Response>) {
   const stub = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-    Promise.resolve(handler(String(input), init ?? {})),
+    Promise.resolve(handler(input instanceof Request ? input.url : input.toString(), init ?? {})),
   );
   vi.stubGlobal("fetch", stub);
   return stub;
@@ -69,22 +69,36 @@ describe("callApi", () => {
       status: 404,
     });
     stubFetch(() => jsonResponse({ error: { code: "rate_limited" } }, 429));
-    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({ code: "rate_limited", status: 429 });
+    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({
+      code: "rate_limited",
+      status: 429,
+    });
   });
 
   it("answers invalid_response when the error is not one this build knows, or not JSON at all", async () => {
     stubFetch(() => jsonResponse({ error: { code: "from_a_newer_build" } }, 409));
-    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({ code: "invalid_response", status: 409 });
+    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({
+      code: "invalid_response",
+      status: 409,
+    });
 
     stubFetch(() => new Response("<html>Bad gateway</html>", { status: 502 }));
-    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({ code: "invalid_response", status: 502 });
+    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({
+      code: "invalid_response",
+      status: 502,
+    });
 
     stubFetch(() => new Response("not json", { status: 200 }));
-    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(callApi(endpoints.publicConfig)).rejects.toMatchObject({
+      code: "invalid_response",
+    });
   });
 
   it("answers network_error when the request never completes", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))),
+    );
     const failure = await callApi(endpoints.publicConfig).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(ApiError);
     expect(failure).toMatchObject({ code: "network_error", status: 0 });
@@ -92,7 +106,10 @@ describe("callApi", () => {
 
   it("lets an abort through untouched, so the caller can tell cancellation from failure", async () => {
     const aborted = new DOMException("Aborted", "AbortError");
-    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(aborted)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(aborted)),
+    );
     await expect(callApi(endpoints.publicConfig)).rejects.toBe(aborted);
   });
 

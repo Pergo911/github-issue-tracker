@@ -23,17 +23,25 @@ test.describe("boot", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
   });
 
-  test("shows the English not-configured screen on a Deployment with no config key", async ({ page }) => {
+  test("shows the English not-configured screen on a Deployment with no config key", async ({
+    page,
+  }) => {
     await openScreen(page, screen("not-configured"));
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(en["boot.notConfigured.title"]);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      en["boot.notConfigured.title"],
+    );
     await expect(page.getByText(en["boot.notConfigured.description"])).toBeVisible();
     await expect(page.getByRole("banner")).toHaveCount(0);
     await expectAccessible(page);
   });
 
-  test("shows the English error screen when the request fails, and recovers on retry", async ({ page }) => {
+  test("shows the English error screen when the request fails, and recovers on retry", async ({
+    page,
+  }) => {
     let failing = true;
-    await page.route(configUrl, (route) => (failing ? route.abort("connectionrefused") : route.continue()));
+    await page.route(configUrl, (route) =>
+      failing ? route.abort("connectionrefused") : route.continue(),
+    );
     await page.goto(urlFor("seeded", "/"));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(en["boot.fetchFailed.title"]);
 
@@ -63,7 +71,9 @@ test.describe("boot", () => {
 });
 
 test.describe("home page", () => {
-  test("shows the Organization's name and the two entry points, in the configured language", async ({ page }) => {
+  test("shows the Organization's name and the two entry points, in the configured language", async ({
+    page,
+  }) => {
     await openScreen(page, screen("home"));
     const header = page.getByRole("banner");
     await expect(header).toContainText(referenceConfig.displayName);
@@ -93,7 +103,9 @@ test.describe("home page", () => {
     expect(await background()).toBe("rgb(13, 17, 23)");
   });
 
-  test("leads to the placeholders, and a reporter never downloads the staff chunk", async ({ page }) => {
+  test("leads to the placeholders, and a reporter never downloads the staff chunk", async ({
+    page,
+  }) => {
     const modules: string[] = [];
     page.on("request", (request) => modules.push(request.url()));
 
@@ -109,7 +121,9 @@ test.describe("home page", () => {
     expect(modules.some((url) => url.includes("/client/staff/"))).toBe(true);
   });
 
-  test("serves a deep link and an unknown address from the same single-page app", async ({ page }) => {
+  test("serves a deep link and an unknown address from the same single-page app", async ({
+    page,
+  }) => {
     await page.goto(urlFor("seeded", "/report"));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(hu["home.submission.title"]);
     await page.goto(urlFor("seeded", "/staff/anything/at/all"));
@@ -120,7 +134,9 @@ test.describe("home page", () => {
 });
 
 test.describe("the Worker in front of the static assets", () => {
-  test("answers /api/ itself, in JSON, and leaves every other path to the assets", async ({ request }) => {
+  test("answers /api/ itself, in JSON, and leaves every other path to the assets", async ({
+    request,
+  }) => {
     const config = await request.get(urlFor("seeded", "/api/config/public"));
     expect(config.status()).toBe(200);
     expect((await config.json()).displayName).toBe(referenceConfig.displayName);

@@ -58,7 +58,11 @@ export default defineConfig({
       testMatch: ["boot.spec.ts", "screens.spec.ts", "sweep.spec.ts"],
       use: { ...devices["Desktop Chrome"] },
     },
-    { name: "screenshots", testMatch: "screenshots.spec.ts", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "screenshots",
+      testMatch: "screenshots.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
     { name: "visual", testMatch: "visual.spec.ts", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: SERVER_KINDS.map(server),

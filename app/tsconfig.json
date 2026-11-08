@@ -7,6 +7,6 @@
     { "path": "./tsconfig.test-unit.json" },
     { "path": "./tsconfig.test-worker.json" },
     { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.e2e.json" }
+    { "path": "./tsconfig.tooling.json" }
   ]
 }

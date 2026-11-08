@@ -6,7 +6,13 @@ import type { PartialCatalog } from "./translate.ts";
 export { en } from "./en.ts";
 export { createFormatter, type Formatter } from "./format.ts";
 export { hu } from "./hu.ts";
-export { createTranslator, placeholdersOf, type MessageKey, type PartialCatalog, type Translator } from "./translate.ts";
+export {
+  createTranslator,
+  placeholdersOf,
+  type MessageKey,
+  type PartialCatalog,
+  type Translator,
+} from "./translate.ts";
 
 const catalogs: Record<Language, PartialCatalog> = { en, hu };
 

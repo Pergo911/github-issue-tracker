@@ -126,7 +126,9 @@ export const configSchema = z.object({
   email: emailSchema,
   dailyCodeBudget: z.int().positive().default(40),
   /** Who saved the configuration last (SPEC 2.4). Written by the Admin-gated save, not by the seed. */
-  lastEditor: z.strictObject({ editedBy: z.string().min(1), editedAt: z.iso.datetime() }).optional(),
+  lastEditor: z
+    .strictObject({ editedBy: z.string().min(1), editedAt: z.iso.datetime() })
+    .optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

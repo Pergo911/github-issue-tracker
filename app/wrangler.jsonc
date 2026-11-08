@@ -11,7 +11,7 @@
   // device-flow proxy included), so /status/<token> and /staff/... are plain assets that never invoke the Worker.
   "assets": {
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
 
   // Non-secret deploy-time values (SPEC 2.6). Never shown on a screen (SPEC 2.4).

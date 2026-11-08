@@ -10,7 +10,13 @@ interface ConfigContextValue {
 const ConfigContext = createContext<ConfigContextValue | null>(null);
 
 /** Everything below this provider can rely on the Deployment's public configuration being loaded. */
-export function ConfigProvider({ config, children }: { config: PublicConfig; children: ReactNode }) {
+export function ConfigProvider({
+  config,
+  children,
+}: {
+  config: PublicConfig;
+  children: ReactNode;
+}) {
   const value = useMemo(
     () => ({
       config,

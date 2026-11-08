@@ -106,8 +106,9 @@ describe("configSchema", () => {
 
     it("rejects the initial flag on every other dimension", () => {
       expect(
-        configSchema.safeParse(withValue("priority", { id: "low", name: "Alacsony", initial: true }))
-          .success,
+        configSchema.safeParse(
+          withValue("priority", { id: "low", name: "Alacsony", initial: true }),
+        ).success,
       ).toBe(false);
     });
   });
@@ -147,15 +148,16 @@ describe("configSchema", () => {
     it("requires every dimension to hold at least one value", () => {
       const base = validConfig();
       expect(
-        configSchema.safeParse({ ...base, taxonomy: { ...base["taxonomy"], category: [] } }).success,
+        configSchema.safeParse({ ...base, taxonomy: { ...base["taxonomy"], category: [] } })
+          .success,
       ).toBe(false);
     });
 
     it("rejects empty and blank display names, for values and for the Organization", () => {
       for (const name of ["", "   ", "\n\t"]) {
-        expect(configSchema.safeParse(withValue("category", { id: "plumbing", name })).success).toBe(
-          false,
-        );
+        expect(
+          configSchema.safeParse(withValue("category", { id: "plumbing", name })).success,
+        ).toBe(false);
         expect(configSchema.safeParse(validConfig({ displayName: name })).success).toBe(false);
       }
     });
@@ -176,13 +178,25 @@ describe("configSchema", () => {
     it("accepts lowercase kebab-case, whatever its parts", () => {
       fc.assert(
         fc.property(kebab, (id) => {
-          expect(configSchema.safeParse(withValue("category", { id, name: "Név" })).success).toBe(true);
+          expect(configSchema.safeParse(withValue("category", { id, name: "Név" })).success).toBe(
+            true,
+          );
         }),
       );
     });
 
     it("rejects anything that is not lowercase kebab-case", () => {
-      const bad = ["Electrical", "heating_cooling", "-leading", "trailing-", "double--dash", "has space", "ékezet", "", "a:b"];
+      const bad = [
+        "Electrical",
+        "heating_cooling",
+        "-leading",
+        "trailing-",
+        "double--dash",
+        "has space",
+        "ékezet",
+        "",
+        "a:b",
+      ];
       for (const id of bad) {
         expect(configSchema.safeParse(withValue("category", { id, name: "Név" })).success, id).toBe(
           false,
@@ -193,10 +207,12 @@ describe("configSchema", () => {
     it("rejects a value whose dimension:value label would exceed GitHub's 50 characters", () => {
       const room = 50 - "category:".length;
       expect(
-        configSchema.safeParse(withValue("category", { id: "a".repeat(room + 1), name: "Név" })).success,
+        configSchema.safeParse(withValue("category", { id: "a".repeat(room + 1), name: "Név" }))
+          .success,
       ).toBe(false);
       expect(
-        configSchema.safeParse(withValue("category", { id: "a".repeat(room), name: "Név" })).success,
+        configSchema.safeParse(withValue("category", { id: "a".repeat(room), name: "Név" }))
+          .success,
       ).toBe(true);
     });
 
@@ -213,7 +229,9 @@ describe("configSchema", () => {
           color,
         ).toBe(true);
       }
-      expect(configSchema.safeParse(withValue("category", { id: "x", name: "N" })).success).toBe(true);
+      expect(configSchema.safeParse(withValue("category", { id: "x", name: "N" })).success).toBe(
+        true,
+      );
     });
 
     it("rejects hashes, short and long forms and non-hex digits", () => {
@@ -235,8 +253,12 @@ describe("configSchema", () => {
     });
 
     it("accepts IANA time zones and rejects anything else", () => {
-      expect(configSchema.safeParse(validConfig({ timezone: "America/New_York" })).success).toBe(true);
-      expect(configSchema.safeParse(validConfig({ timezone: "Mars/Olympus_Mons" })).success).toBe(false);
+      expect(configSchema.safeParse(validConfig({ timezone: "America/New_York" })).success).toBe(
+        true,
+      );
+      expect(configSchema.safeParse(validConfig({ timezone: "Mars/Olympus_Mons" })).success).toBe(
+        false,
+      );
     });
   });
 
@@ -273,8 +295,9 @@ describe("configSchema", () => {
       const lastEditor = { editedBy: "pergo911", editedAt: "2026-11-08T10:00:00.000Z" };
       expect(configSchema.parse(validConfig({ lastEditor })).lastEditor).toEqual(lastEditor);
       expect(
-        configSchema.safeParse(validConfig({ lastEditor: { editedBy: "x", editedAt: "yesterday" } }))
-          .success,
+        configSchema.safeParse(
+          validConfig({ lastEditor: { editedBy: "x", editedAt: "yesterday" } }),
+        ).success,
       ).toBe(false);
     });
   });

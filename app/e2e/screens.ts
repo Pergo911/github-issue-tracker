@@ -47,7 +47,8 @@ const headingShown = async (page: Page) => {
 export const screens: Screen[] = [
   {
     id: "loading",
-    description: "The neutral state while the public configuration loads (the request never answers).",
+    description:
+      "The neutral state while the public configuration loads (the request never answers).",
     server: "seeded",
     path: "/",
     prepare: async (page) => {
@@ -81,7 +82,8 @@ export const screens: Screen[] = [
   },
   {
     id: "home",
-    description: "The home page: the Organization's name in the header and the two entry points, in Hungarian.",
+    description:
+      "The home page: the Organization's name in the header and the two entry points, in Hungarian.",
     server: "seeded",
     path: "/",
     ready: headingShown,
@@ -123,7 +125,9 @@ export async function openScreen(
   options: { pseudo?: boolean } = {},
 ): Promise<void> {
   await screen.prepare?.(page);
-  const path = options.pseudo ? `${screen.path}${screen.path.includes("?") ? "&" : "?"}lang=pseudo` : screen.path;
+  const path = options.pseudo
+    ? `${screen.path}${screen.path.includes("?") ? "&" : "?"}lang=pseudo`
+    : screen.path;
   await page.goto(urlFor(screen.server, path));
   await screen.ready(page);
 }

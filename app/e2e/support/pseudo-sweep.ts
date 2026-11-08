@@ -17,12 +17,16 @@ function escapeRegExp(text: string): string {
  * letters remain once the marked segments and the screen's declared data are removed is English (or any text)
  * that bypassed the catalog, shadcn's built-in strings included.
  */
-export function findUnmarked(strings: readonly string[], allowed: readonly AllowedText[] = []): string[] {
+export function findUnmarked(
+  strings: readonly string[],
+  allowed: readonly AllowedText[] = [],
+): string[] {
   const leaks = new Set<string>();
   for (const original of strings) {
     let rest = original.replace(MARKED, " ");
     for (const item of allowed) {
-      const pattern = typeof item === "string" ? new RegExp(escapeRegExp(item), "g") : new RegExp(item, "g");
+      const pattern =
+        typeof item === "string" ? new RegExp(escapeRegExp(item), "g") : new RegExp(item, "g");
       rest = rest.replace(pattern, " ");
     }
     if (HAS_LETTER.test(rest)) leaks.add(rest.trim() === "" ? original.trim() : rest.trim());
@@ -74,7 +78,10 @@ export async function collectReadableStrings(page: Page): Promise<string[]> {
         const value = element.getAttribute(name);
         if (value) strings.push(value);
       }
-      if (element instanceof HTMLInputElement && ["submit", "button", "reset"].includes(element.type)) {
+      if (
+        element instanceof HTMLInputElement &&
+        ["submit", "button", "reset"].includes(element.type)
+      ) {
         strings.push(element.value);
       }
     }
@@ -85,6 +92,9 @@ export async function collectReadableStrings(page: Page): Promise<string[]> {
 }
 
 /** The strings on the current page that bypassed the catalog. Load the page with `?lang=pseudo` first. */
-export async function findCatalogBypasses(page: Page, allowed: readonly AllowedText[] = []): Promise<string[]> {
+export async function findCatalogBypasses(
+  page: Page,
+  allowed: readonly AllowedText[] = [],
+): Promise<string[]> {
   return findUnmarked(await collectReadableStrings(page), allowed);
 }

@@ -26,14 +26,27 @@ function isInside(parent: string, child: string): boolean {
 export function assertDisposable(directory: string): void {
   const target = resolve(directory);
   if (!isInside(APP_ROOT, target) && !isInside(resolve(tmpdir()), target)) {
-    throw new Error(`Refusing to delete ${target}: it is outside the worktree and the temp directory`);
+    throw new Error(
+      `Refusing to delete ${target}: it is outside the worktree and the temp directory`,
+    );
   }
 }
 
-async function withLocalEnv<T>(persistDir: string, use: (env: Env) => Promise<T>): Promise<T> {
+/** The slice of the local Worker environment this script uses. (The Workers runtime types are not loaded here.) */
+interface LocalBindings {
+  KV: {
+    get(key: string, type: "json"): Promise<unknown>;
+    put(key: string, value: string): Promise<void>;
+  };
+}
+
+async function withLocalEnv<T>(
+  persistDir: string,
+  use: (env: LocalBindings) => Promise<T>,
+): Promise<T> {
   // Wrangler warns that the Durable Object gates "will not work" in this KV-only proxy. True, and irrelevant.
   process.env["WRANGLER_LOG"] ??= "error";
-  const proxy = await getPlatformProxy<Env>({
+  const proxy = await getPlatformProxy<LocalBindings>({
     configPath: resolve(APP_ROOT, "wrangler.jsonc"),
     // getPlatformProxy uses this path as is, while the Vite plugin keeps its state in <path>/v3.
     persist: { path: join(persistDir, "v3") },

@@ -1,14 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { referenceConfig } from "../seed/reference-config.ts";
-import { createProjection, PUBLIC_CONFIG_FIELDS, publicConfigSchema, toPublicConfig } from "./public.ts";
+import {
+  createProjection,
+  PUBLIC_CONFIG_FIELDS,
+  publicConfigSchema,
+  toPublicConfig,
+} from "./public.ts";
 import { configSchema } from "./schema.ts";
 
 describe("public projection", () => {
   const config = configSchema.parse(referenceConfig);
 
   it("holds exactly the fields SPEC 2.4 lets the SPA see", () => {
-    const expected = ["codeSentHelp", "displayName", "emergencyNotice", "language", "taxonomy", "timezone"];
+    const expected = [
+      "codeSentHelp",
+      "displayName",
+      "emergencyNotice",
+      "language",
+      "taxonomy",
+      "timezone",
+    ];
     expect(Object.keys(toPublicConfig(config)).sort()).toEqual(expected);
     expect([...PUBLIC_CONFIG_FIELDS].sort()).toEqual(expected);
   });

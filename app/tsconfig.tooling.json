@@ -1,14 +1,14 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "outDir": ".tsbuild/e2e",
-    "tsBuildInfoFile": ".tsbuild/e2e.tsbuildinfo",
+    "outDir": ".tsbuild/tooling",
+    "tsBuildInfoFile": ".tsbuild/tooling.tsbuildinfo",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"],
     "paths": {
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["playwright.config.ts", "e2e/**/*"],
+  "include": ["playwright.config.ts", "e2e/**/*", "scripts/**/*"],
   "references": [{ "path": "./tsconfig.shared.json" }]
 }

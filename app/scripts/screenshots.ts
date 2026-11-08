@@ -43,7 +43,7 @@ ${sections}</body></html>`;
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
 const run = await prepareRun();
-let code = 1;
+let code: number;
 try {
   code = await runPlaywright(["--project=screenshots", ...process.argv.slice(2)], {
     ...run.env,
@@ -53,5 +53,7 @@ try {
   run.cleanup();
 }
 writeFileSync(join(output, "index.html"), indexPage());
-console.log(`\nScreenshots: ${join(output, "index.html")}\n${pathToFileURL(join(output, "index.html")).href}`);
+console.log(
+  `\nScreenshots: ${join(output, "index.html")}\n${pathToFileURL(join(output, "index.html")).href}`,
+);
 process.exit(code);
