@@ -98,7 +98,7 @@ describe("repo GET and the permissions object", () => {
 
 describe("installation-token exchange", () => {
   async function exchange(
-    overrides: Parameters<typeof signTestJwt>[1] | null = {},
+    overrides: Partial<Parameters<typeof signTestJwt>[1]> | null = {},
     mutate = (jwt: string) => jwt,
   ) {
     const test = await createTestWorld();
