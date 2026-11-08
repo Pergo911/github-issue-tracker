@@ -31,6 +31,8 @@ export function assertDisposable(directory: string): void {
 }
 
 async function withLocalEnv<T>(persistDir: string, use: (env: Env) => Promise<T>): Promise<T> {
+  // Wrangler warns that the Durable Object gates "will not work" in this KV-only proxy. True, and irrelevant.
+  process.env["WRANGLER_LOG"] ??= "error";
   const proxy = await getPlatformProxy<Env>({
     configPath: resolve(APP_ROOT, "wrangler.jsonc"),
     // getPlatformProxy uses this path as is, while the Vite plugin keeps its state in <path>/v3.

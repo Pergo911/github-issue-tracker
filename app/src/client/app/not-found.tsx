@@ -10,7 +10,7 @@ export function NotFound() {
   useDocumentTitle(t("notFound.title"), displayName);
   return (
     <div className="flex flex-col items-start gap-4">
-      <h1 className="text-2xl font-semibold">{t("notFound.title")}</h1>
+      <h1 className="text-xl font-semibold">{t("notFound.title")}</h1>
       <p className="text-muted-foreground">{t("notFound.description")}</p>
       <BackToHome />
     </div>

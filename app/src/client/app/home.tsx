@@ -38,7 +38,7 @@ export function Home() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{t("home.heading")}</h1>
+        <h1 className="text-xl font-semibold">{t("home.heading")}</h1>
         <p className="text-muted-foreground">{t("home.intro")}</p>
       </div>
       <ul className="grid gap-4 md:grid-cols-2">

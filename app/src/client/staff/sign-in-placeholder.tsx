@@ -13,7 +13,7 @@ export function Component() {
   useDocumentTitle(t("home.staff.title"), displayName);
   return (
     <div className="flex flex-col items-start gap-4">
-      <h1 className="text-2xl font-semibold">{t("home.staff.title")}</h1>
+      <h1 className="text-xl font-semibold">{t("home.staff.title")}</h1>
       <p className="text-muted-foreground">{t("placeholder.comingSoon")}</p>
       <BackToHome />
     </div>
