@@ -2,8 +2,8 @@ import type {
   DeviceCodeResponse,
   DeviceFlowError,
   DeviceTokenResponse,
-} from "@shared/github/types.ts";
-import { DEVICE_CODE_GRANT } from "@shared/github/constants.ts";
+} from "../../src/shared/github/types.ts";
+import { DEVICE_CODE_GRANT } from "../../src/shared/github/constants.ts";
 import type { Clock } from "../clock.ts";
 import { REAL_WEB } from "./render.ts";
 import {

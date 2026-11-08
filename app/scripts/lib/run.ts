@@ -36,7 +36,7 @@ export interface Run {
 }
 
 export async function prepareRun(): Promise<Run> {
-  const [seeded, empty] = await freePorts(2);
+  const [seeded, empty, seededFakes, emptyFakes] = await freePorts(4);
   const directory = join(APP_ROOT, ".tmp", `run-${process.pid}-${Date.now().toString(36)}`);
   mkdirSync(directory, { recursive: true });
   // The seeded server's state holds the Appendix A configuration; the empty one starts with none.
@@ -46,6 +46,8 @@ export async function prepareRun(): Promise<Run> {
     env: {
       E2E_PORT_SEEDED: String(seeded),
       E2E_PORT_EMPTY: String(empty),
+      E2E_FAKES_PORT_SEEDED: String(seededFakes),
+      E2E_FAKES_PORT_EMPTY: String(emptyFakes),
       E2E_RUN_DIR: directory,
     },
     cleanup: () => rmSync(directory, { recursive: true, force: true }),

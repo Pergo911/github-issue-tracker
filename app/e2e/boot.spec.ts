@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import { en } from "../src/shared/i18n/en.ts";
 import { hu } from "../src/shared/i18n/hu.ts";
 import { referenceConfig } from "../src/shared/seed/reference-config.ts";

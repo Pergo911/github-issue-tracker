@@ -38,7 +38,7 @@ describe("sendMail", () => {
     expect(seen!.headers.get("user-agent")).toBeTruthy();
     expect(seen!.headers.get("content-type")).toBe("application/json");
     expect(seen!.headers.get("idempotency-key")).toBe("confirm/7");
-    const body = (await seen!.json()) as Record<string, unknown>;
+    const body = await seen!.json<Record<string, unknown>>();
     expect(body).toMatchObject({ reply_to: "gondnok@example.org", to: ["resident@example.hu"] });
     expect("html" in body).toBe(false);
     expect("replyTo" in body).toBe(false);

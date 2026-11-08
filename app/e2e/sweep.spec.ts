@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import { axeViolations } from "./support/axe.ts";
 import { findCatalogBypasses } from "./support/pseudo-sweep.ts";
 

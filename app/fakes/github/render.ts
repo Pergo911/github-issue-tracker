@@ -7,7 +7,7 @@ import type {
   GitHubRepository,
   GitHubTimelineEvent,
   GitHubUser,
-} from "@shared/github/types.ts";
+} from "../../src/shared/github/types.ts";
 import {
   roleRank,
   type Account,

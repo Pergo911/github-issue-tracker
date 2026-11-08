@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEVICE_CODE_GRANT } from "@shared/github/constants.ts";
+import { DEVICE_CODE_GRANT } from "../../src/shared/github/constants.ts";
 import { createTestWorld, TEST_STAFF_CLIENT_ID } from "../testing/world.ts";
 
 // Device flow as GitHub's web endpoints behave (SPEC 2.2, docs "Authorizing OAuth apps"): errors are HTTP 200

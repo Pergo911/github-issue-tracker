@@ -1,4 +1,4 @@
-import { GITHUB_ACCEPT, GITHUB_API_VERSION } from "@shared/github/constants.ts";
+import { GITHUB_ACCEPT, GITHUB_API_VERSION } from "../../src/shared/github/constants.ts";
 import type { World } from "../world.ts";
 
 export interface Reply {

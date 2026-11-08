@@ -1,4 +1,4 @@
-import type { GitHubIssuesWebhookPayload } from "@shared/github/types.ts";
+import type { GitHubIssuesWebhookPayload } from "../../src/shared/github/types.ts";
 
 export interface WebhookTarget {
   /** Hands the signed request to the Worker. Resolves with its response; a rejection is a failed delivery. */

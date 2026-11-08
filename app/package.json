@@ -23,6 +23,7 @@
     "test:e2e": "node scripts/e2e.ts",
     "seed": "node scripts/seed.ts",
     "reset": "node scripts/reset.ts",
+    "world": "node scripts/world.ts",
     "screenshots": "node scripts/screenshots.ts",
     "test:visual": "node scripts/visual.ts",
     "test:visual:update": "node scripts/visual.ts --update",

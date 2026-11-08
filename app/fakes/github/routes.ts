@@ -1,5 +1,5 @@
-import { GITHUB_API_VERSION } from "@shared/github/constants.ts";
-import type { GitHubErrorBody, GitHubIssuesWebhookPayload } from "@shared/github/types.ts";
+import { GITHUB_API_VERSION } from "../../src/shared/github/constants.ts";
+import type { GitHubErrorBody, GitHubIssuesWebhookPayload } from "../../src/shared/github/types.ts";
 import type { Clock } from "../clock.ts";
 import { fromBase64Url, importPublicKey } from "../keys.ts";
 import {

@@ -28,7 +28,7 @@ describe("the local world's smoke routes", () => {
       body: JSON.stringify({ to: "resident@example.hu" }),
     });
     expect(response.status).toBe(200);
-    const result = (await response.json()) as Record<string, unknown>;
+    const result = await response.json<Record<string, unknown>>();
     expect(result).toMatchObject({
       issueNumber: 1,
       issueTitle: "Local world smoke test",

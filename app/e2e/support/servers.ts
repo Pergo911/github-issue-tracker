@@ -24,6 +24,16 @@ export function serverPort(kind: ServerKind): number {
   return Number(requiredEnvironment(`E2E_PORT_${kind.toUpperCase()}`));
 }
 
+/** The port the server's local world (fake GitHub, fake Resend, control API) listens on. */
+export function fakesPort(kind: ServerKind): number {
+  return Number(requiredEnvironment(`E2E_FAKES_PORT_${kind.toUpperCase()}`));
+}
+
+/** The control API of a server's local world: `remoteControl(controlUrl(kind))`. */
+export function controlUrl(kind: ServerKind): string {
+  return `http://127.0.0.1:${fakesPort(kind)}/control`;
+}
+
 export function serverOrigin(kind: ServerKind): string {
   return `http://127.0.0.1:${serverPort(kind)}`;
 }

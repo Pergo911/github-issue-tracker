@@ -1,5 +1,5 @@
-import { referenceConfig } from "@shared/seed/reference-config.ts";
-import { labelName, DIMENSIONS } from "@shared/config/schema.ts";
+import { referenceConfig } from "../src/shared/seed/reference-config.ts";
+import { labelName, DIMENSIONS } from "../src/shared/config/schema.ts";
 import { createClock, type Clock } from "./clock.ts";
 import type {
   Control,

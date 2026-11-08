@@ -10,5 +10,15 @@
     }
   },
   "include": ["playwright.config.ts", "e2e/**/*", "scripts/**/*"],
-  "references": [{ "path": "./tsconfig.shared.json" }]
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    },
+    {
+      "path": "./tsconfig.fakes.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }

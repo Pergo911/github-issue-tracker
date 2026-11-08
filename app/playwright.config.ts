@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
-import { runDirectory, serverPort, SERVER_KINDS, type ServerKind } from "./e2e/support/servers.ts";
+import {
+  fakesPort,
+  runDirectory,
+  serverPort,
+  SERVER_KINDS,
+  type ServerKind,
+} from "./e2e/support/servers.ts";
 
 /**
  * Do not run `playwright test` directly. `npm run test:e2e`, `npm run screenshots` and `npm run test:visual`
@@ -23,9 +29,12 @@ const server = (kind: ServerKind) => ({
     PERSIST_DIR: `${run}/state-${kind}`,
     VITE_CACHE_DIR: `${run}/vite-cache-${kind}`,
     VITE_PSEUDO: "1",
-    // Local Workers secrets (SPEC 2.6): fixed values, the fakes of ticket #22 accept anything.
+    // The fake GitHub and fake Resend (ticket #22) this server hosts listen here.
+    FAKES_PORT: String(fakesPort(kind)),
+    // Local Workers secrets (SPEC 2.6): fixed values. The Bot key is left empty on purpose: the dev server then
+    // generates a throwaway one and the fake GitHub verifies the Bot's JWTs with it.
     RESEND_API_KEY: "e2e-resend-key",
-    BOT_APP_PRIVATE_KEY: "e2e-bot-key",
+    BOT_APP_PRIVATE_KEY: "",
     GITHUB_WEBHOOK_SECRET: "e2e-webhook-secret",
   },
 });
@@ -55,7 +64,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: ["boot.spec.ts", "screens.spec.ts", "sweep.spec.ts"],
+      testMatch: ["boot.spec.ts", "screens.spec.ts", "sweep.spec.ts", "world.spec.ts"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
