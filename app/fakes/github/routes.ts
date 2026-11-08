@@ -102,14 +102,19 @@ function optionalString(
   return value;
 }
 
+/** Sorts by a tuple key (compared left to right), so a timestamp tie falls back to the number or id. */
 function sortBy<T>(
   items: T[],
-  key: (item: T) => number,
+  key: (item: T) => [number, number],
   direction: string | null,
   fallback: "asc" | "desc",
-) {
+): T[] {
   const factor = (direction ?? fallback) === "asc" ? 1 : -1;
-  return [...items].sort((a, b) => (key(a) - key(b)) * factor);
+  return [...items].sort((a, b) => {
+    const [a1, a2] = key(a);
+    const [b1, b2] = key(b);
+    return (a1 - b1 || a2 - b2) * factor;
+  });
 }
 
 const STATE_REASONS: readonly (StateReason | null)[] = [
@@ -284,8 +289,10 @@ export class GitHubService {
       const sort = c.url.searchParams.get("sort") === "updated" ? "updated" : "created";
       comments = sortBy(
         comments,
-        (comment) =>
-          (sort === "updated" ? comment.updatedAt : comment.createdAt) * 1e7 + (comment.id % 1e7),
+        (comment): [number, number] => [
+          sort === "updated" ? comment.updatedAt : comment.createdAt,
+          comment.id,
+        ],
         c.url.searchParams.get("direction"),
         "asc",
       );
@@ -362,7 +369,7 @@ export class GitHubService {
       // Equal timestamps (the same second) fall back to the number so the order is stable.
       issues = sortBy(
         issues,
-        (issue) => key(issue) * 1e7 + issue.number,
+        (issue): [number, number] => [key(issue), issue.number],
         q.get("direction"),
         "desc",
       );
@@ -539,7 +546,12 @@ export class GitHubService {
           : sort === "comments"
             ? this.#store.commentsOn(issue.number).length
             : issue.createdAt;
-      const sorted = sortBy(matches, (issue) => key(issue) * 1e7 + issue.number, order, "desc");
+      const sorted = sortBy(
+        matches,
+        (issue): [number, number] => [key(issue), issue.number],
+        order,
+        "desc",
+      );
       const renderer = this.#renderer(c.url);
       const { page, link } = paginate(c.url, sorted);
       return jsonResponse(
