@@ -27,6 +27,7 @@ export default defineConfig({
           environment: "node",
           include: [
             "src/shared/**/*.test.ts",
+            "fakes/**/*.test.ts",
             "src/client/**/*.test.{ts,tsx}",
             "eslint-rules/**/*.test.ts",
             "e2e/**/*.test.ts",
