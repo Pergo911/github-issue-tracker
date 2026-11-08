@@ -8,7 +8,7 @@ import { loadConfig } from "../config/load.ts";
 export function registerPublicConfig(app: Hono<{ Bindings: Env }>): void {
   registerEndpoint(app, endpoints.publicConfig, async ({ env, fail }) => {
     const config = await loadConfig(env.KV);
-    if (config === null) fail("not_configured");
+    if (config === null) return fail("not_configured");
     return toPublicConfig(config);
   });
 }
