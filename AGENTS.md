@@ -6,14 +6,106 @@ This file provides guidance to coding agents when working with code in this repo
 
 A **fault-reporting and maintenance-tracking system** ("Hibabejelentő és karbantartás-kezelő rendszer") for a
 building (társasház), institution, or organization, with reporter, maintenance-staff, and admin roles. This
-repository is where the product lives. It currently holds only the Markdown design documents; there is no
-application code yet. The original requirements brief is in Hungarian in
+repository is where the product lives: the design documents, and `app/` (the SPA and the Worker). `shell/`
+(the Electron wrapper) arrives with ticket #31. The original requirements brief is in Hungarian in
 [`Ticket Management System Feladatleírás.md`](./Ticket%20Management%20System%20Feladatleírás.md). It
 deliberately leaves the exact roles, permissions, categories, priorities, statuses, and stored data open;
 `SPEC.md` records the decisions.
 
-There are no build, lint, or test commands yet. The stack and repo layout are decided (`SPEC.md` §2.6, §2.7), but no
-code exists: do not scaffold `app/` or `shell/` unless the user explicitly asks to start implementation.
+The implementation plan is the sub-issues of [#19](https://github.com/Pergo911/github-issue-tracker/issues/19);
+GitHub's blocking links show which are ready. Each ticket is done when it meets the definition of done below.
+
+## Working in `app/`
+
+Run everything from `app/`, with npm. `package.json` has the full script list; these are the ones to reach for:
+
+| Command | What it checks | Run it |
+| --- | --- | --- |
+| `npm run verify` | **all of the below**, in parallel, red on any failure (about 2 minutes) | before you call a ticket done |
+| `npm run verify -- --fast` | typecheck, lint, format, unit, worker, tooling: no browser, no Docker | while you work |
+| `npm run typecheck` | `wrangler types`, then `tsc -b` over client, worker, shared, tests, tooling | after type-level changes |
+| `npm run lint` · `npm run format` | ESLint (`format:check` is Prettier's check) | before committing |
+| `npm run test:unit` | Vitest in Node: `shared/`, client logic, lint rules, catalog completeness (about 2 s) | on every `shared/` or client-logic change |
+| `npm run test:worker` | Vitest in the local Workers runtime: KV, Durable Objects, rate limits | on every Worker change |
+| `npm run test:tooling` | compile-time boundaries, seed and reset, chunk check | after touching tsconfig, scripts or the build |
+| `npm run test:e2e` | Playwright against the real dev server: journeys, axe, pseudo-language sweep | after UI or API changes |
+| `npm run screenshots` | every declared screen, light and dark, 1280 and 375 px, Hungarian, in your local browser | for every screen you add or change |
+| `npm run test:visual` | the same screens against `e2e/reference/*.png`, rendered in Playwright's Docker image | in `verify`; run it alone after UI changes |
+| `npm run test:visual:update` | rewrites the reference images | only after you opened the diffs and each change is intended |
+| `npm run dev` · `npm run seed` · `npm run reset` | the dev server · Appendix A configuration into local KV · clear all local state | seed once per worktree before `dev` |
+
+`npm run setup` installs the Chromium that `test:e2e` and `screenshots` use. `npm run test:visual` needs Docker
+running. Extra arguments reach Playwright: `npm run test:e2e -- -g "home page"`. Run Playwright through these
+scripts, never `npx playwright test`: they pick the ports and state the run needs.
+
+### Definition of done
+
+1. `npm run verify` is green, with nothing skipped.
+2. Every screen and state you add or change is declared in `app/e2e/screens.ts`. That one list drives the
+   screenshots, the reference images, axe in light and dark, and the pseudo-language sweep that fails on any
+   visible text or accessible name that did not come from the catalog. Name data that is legitimately not
+   catalog wording (a Report's title, a date) in the entry's `allowText`.
+3. `npm run screenshots`, then **open every image** of every screen you added or changed (the Read tool shows
+   images) and check it against `docs/ui-github-look.md` and the catalog: measurements, tokens, wording, light
+   and dark, 375 px. Fix what you find and capture again.
+4. A red `test:visual` is a question: open the images in `.screenshots/diffs/index.html` (actual, expected, diff).
+   An unintended change is a bug. An intended one gets `npm run test:visual:update`, then open each changed
+   `e2e/reference/*.png` and commit it with the code.
+5. The closing comment on the ticket lists the screens you opened, what you checked and what you fixed.
+
+An interactive browser preview, where your environment has one, is for exploring on top of the screenshots,
+never instead of them.
+
+### Test-first, at a seam
+
+Write the failing test first, at the public seam: a Zod schema, `callApi`, an endpoint through the real Worker,
+a screen through the real dev server. Tests sit beside the code (`*.test.ts`), end-to-end specs in `e2e/`.
+The tooling: Vitest 5, `@cloudflare/vitest-plugin` (the renamed `@cloudflare/vitest-pool-workers`, which is
+deprecated; its test API is `import { env, exports } from "cloudflare:workers"`), fast-check for property
+tests (codecs, validators), Playwright with `@axe-core/playwright`, ESLint 10 with typescript-eslint, Prettier.
+Component tests need a DOM: add `happy-dom` to the `unit` project when the first one does.
+
+### Conventions the code cannot confess
+
+- **Three environments, one compiler.** `client` has DOM types, `worker` has Workers types, `shared` has
+  neither, as three composite tsconfig projects, so a client↔worker import or an environment global in `shared/`
+  fails to compile; the lint rule `reports/no-layer-crossing` says the same about `reporter/` and `staff/`.
+  Reach `staff/` only through a lazy route or `import()`, so it stays its own chunk (`npm run build` checks).
+- **One API contract.** A new endpoint is declared in `src/shared/api/endpoints.ts` (method, `/api/` path, Zod
+  request schema, `type<Response>()`, error codes with HTTP statuses), registered in the Worker through
+  `registerEndpoint`, and called from the SPA through `callApi`. Every error code needs an `api.error.<code>`
+  message in `en.ts` and `hu.ts`; the types enforce it. Path parameters are not in the contract yet: extend
+  `defineEndpoint`, `registerEndpoint` and `callApi` together, with a test, when a ticket needs them.
+- **Words live in the catalog.** Add each string to `src/shared/i18n/en.ts` and `hu.ts` and render
+  `t("key")`; the catalog test fails when `hu` lacks one, and `reports/no-literal-text` rejects text in JSX.
+  The boot screens that show before the configuration loads are English by design.
+- **Colours live in the theme.** Components use the token classes of `src/client/ui/theme.css` (`bg-card`,
+  `text-muted-foreground`, `border-border`, …); `reports/no-hardcoded-colors` rejects hex, rgb, hsl and
+  Tailwind palette classes. A copied shadcn component is restyled to Primer's measurements, loses its Lucide
+  icons for Octicons and its built-in English for catalog strings (`components.json` is set up for
+  `npx shadcn add`).
+- **Bindings and secrets** are declared once in `wrangler.jsonc` (secrets under `secrets.required`, mirrored in
+  `.dev.vars.example`); run `npm run types` after editing it. Worker tests get the secrets as fixed values
+  from `vitest.config.ts`.
+- **Versions are pinned, and two are held back on purpose.** TypeScript stays on 6.0.x until typescript-eslint
+  supports 7. npm 12 blocks install scripts unless `package.json` lists them under `allowScripts` (`esbuild`,
+  `workerd`).
+- **Scripts run as native TypeScript** (Node strips the types): erasable syntax only, `.ts` extensions on
+  relative imports, no path aliases under `scripts/`.
+
+### Parallel runs
+
+Several agents run `verify`, dev servers and Playwright in sibling worktrees at the same time, so nothing here
+may use a fixed port or shared global state:
+
+- The dev server takes 5173 or the next free port; `PORT=<n>` pins one and fails if it is taken. The end-to-end,
+  screenshot and visual runs each pick free ports and a private directory under `.tmp/` for the run.
+- Local KV and Durable Object state lives in `.wrangler/state` inside the worktree (git-ignored); `PERSIST_DIR`
+  moves it. `npm run reset` clears only this worktree's. The Workers debugger is off unless `INSPECTOR_PORT` is set.
+- The Docker run starts a container with a unique name on a random loopback port and mounts nothing: the dev
+  servers stay on the host and the container's browser reaches them through Playwright's tunnel.
+- Run one `verify` per worktree at a time (the type check and the compile-boundary tests share `.tsbuild/`).
+- Stop a server by its PID. Killing every `node.exe` or `workerd.exe` takes down the other worktrees' servers.
 
 ## Documents
 
@@ -79,7 +171,7 @@ Invariants to preserve:
 
 The wayfinder map ([Map: close SPEC §7 open items](https://github.com/Pergo911/github-issue-tracker/issues/1)) is complete;
 `SPEC.md` §7 records the decisions. Remaining validation (notably the title alphabet) belongs to implementation,
-not another round on the closed map. A new design change still updates the spec; completion is not a claim that code exists.
+not another round on the closed map. A new design change still updates the spec.
 
 ## Agent skills
 

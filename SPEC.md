@@ -1262,6 +1262,11 @@ relevant design sections; they are not claims that the application already exist
 
 ## 8. Next steps
 
+The implementation plan is the sub-issues of [Implementation: reference Deployment
+MVP](https://github.com/Pergo911/github-issue-tracker/issues/19), with its verification standard and the
+implementation-planning decisions (test and lint tooling, base URLs for the fakes, the `workers.dev` address). The
+list below is the order of the design; the issue's tickets are the work queue.
+
 1. Delivery format is decided: Electron shell around the hosted SPA (§2.1). The device-flow spike (§7
    item 13) passed for both app types; no fallback is needed. The wayfinder map is complete: begin implementation
    planning, not another design-ticket round. Verify the restricted title policy during implementation (§4.1);
