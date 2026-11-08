@@ -1,3 +1,6 @@
+import { remoteControl } from "../fakes/control.ts";
+import { startBridge } from "../fakes/node/bridge.ts";
+import { createTestWorld } from "../fakes/testing/world.ts";
 import { controlUrl, urlFor } from "./support/servers.ts";
 import { expect, test } from "./support/test.ts";
 
@@ -94,26 +97,32 @@ test.describe("the local world in vite dev", () => {
     for (const delivery of deliveries) expect(delivery.attempts[0]?.status).not.toBeNull();
   });
 
-  test("the shared invariant catches an Allowlist address in a write to the fake GitHub", async ({
+  test("the invariant check works through the control API, on a private world so no other test sees it", async ({
     request,
-    world,
   }) => {
-    const address = "invariant-probe@example.hu";
-    const { token } = await world.addStaff({ login: "e2e-invariant-admin", role: "admin" });
-    await world.protectEmail(address);
-    const created = await request.post(`${githubBase}/repos/local-org/reports/issues`, {
-      headers: {
-        authorization: `Bearer ${token}`,
-        "x-github-api-version": "2022-11-28",
-        "user-agent": "e2e",
-      },
-      data: { title: "contact", body: address },
-    });
-    expect(created.status()).toBe(201);
-    // Taking the violations is what a failing test would show; draining them keeps this one green.
-    const violations = await world.takeViolations();
-    expect(violations).toEqual([
-      expect.objectContaining({ method: "POST", address, where: "body" }),
-    ]);
+    // Violations are global to a server's world, and the lifecycle fixture drains them after every test: a test
+    // that provokes one on a shared server would fail whichever test finishes next. So it gets a world of its own.
+    const { world: privateWorld } = await createTestWorld();
+    const bridge = await startBridge(privateWorld);
+    try {
+      const control = remoteControl(`${bridge.url}/control`);
+      const address = "invariant-probe@example.hu";
+      const { token } = await control.addStaff({ login: "probe-admin", role: "admin" });
+      await control.protectEmail(address);
+      const created = await request.post(`${bridge.url}/github/repos/fake-org/reports/issues`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-github-api-version": "2022-11-28",
+          "user-agent": "e2e",
+        },
+        data: { title: "contact", body: address },
+      });
+      expect(created.status()).toBe(201);
+      expect(await control.takeViolations()).toEqual([
+        expect.objectContaining({ method: "POST", address, where: "body" }),
+      ]);
+    } finally {
+      await bridge.close();
+    }
   });
 });

@@ -45,7 +45,8 @@ export default defineConfig({
   fullyParallel: true,
   retries: 0,
   reporter: [["list"]],
-  timeout: 30_000,
+  // 60 s, not 30: with several worktrees running dev servers and Docker at once a page can take 20 s to load.
+  timeout: 60_000,
   expect: {
     timeout: 10_000,
     toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: "disabled", caret: "hide" },

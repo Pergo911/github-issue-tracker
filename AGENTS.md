@@ -22,6 +22,7 @@ Run everything from `app/`, with npm. `package.json` has the full script list; t
 | Command | What it checks | Run it |
 | --- | --- | --- |
 | `npm run verify` | **all of the below**, in parallel, red on any failure (about 2 minutes) | before you call a ticket done |
+| `VERIFY_JOBS=2 npm run verify` | the same with two steps at a time | when sibling worktrees load the machine and e2e or visual time out |
 | `npm run verify -- --fast` | typecheck, lint, format, unit, worker, tooling: no browser, no Docker | while you work |
 | `npm run typecheck` | `wrangler types`, then `tsc -b` over client, worker, shared, tests, tooling | after type-level changes |
 | `npm run lint` · `npm run format` | ESLint (`format:check` is Prettier's check) | before committing |
@@ -128,7 +129,7 @@ fakes keep their state in memory: a dev-server restart is a reset.
 - **The shared invariant: no Allowlist email address is written to GitHub** (SPEC 4.1, 5). Every write to the fake
   GitHub is scanned for the addresses registered with `protectEmail`. Worker tests also register every `allowlist:` key in
   KV when a test ends, so any Worker test is covered without asking; an end-to-end test that adds an Allowlist entry calls
-  `world.protectEmail(address)`. A violation fails the test that was running.
+  `world.protectEmail(address)`. A violation fails the test that was running (in end-to-end, whichever test finishes next: a server's violations are global to its world, so a test that provokes one on purpose needs a private world, as in `e2e/world.spec.ts`).
 - **The fakes' tests** (`fakes/**/*.test.ts`, in `test:unit`) hold the fakes to GitHub's and Resend's documented
   behaviour. Change a fake together with its test, and keep `fakes/` free of `src/client` and `src/worker` (it has its own
   tsconfig, DOM lib only, so it runs in Node and in workerd). `vite.config.ts` loads `fakes/node/` as plain Node: no path

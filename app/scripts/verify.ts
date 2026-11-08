@@ -5,6 +5,7 @@
 //   npm run verify -- --fast              typecheck, lint, format, unit, worker, tooling: no browser, no Docker
 //   npm run verify -- --only lint,test:unit
 //   npm run verify -- --skip test:visual  (VERIFY_SKIP=test:visual does the same, for a machine without Docker)
+//   VERIFY_JOBS=2 npm run verify          fewer steps at once, when the machine is busy (default 5)
 //
 // Each step's full output goes to .tmp/verify-<time>/<step>.log; a failed step prints its tail here.
 import { spawn } from "node:child_process";
@@ -63,7 +64,8 @@ const STEPS: Step[] = [
 
 /** Steps that must not overlap with each other: both build into .tsbuild/, so typecheck goes first, alone. */
 const FIRST = "typecheck";
-const PARALLEL = 5;
+/** Steps run at once. `VERIFY_JOBS=2` is kinder on a machine that other agents share (timeouts are load, not bugs). */
+const PARALLEL = Math.max(1, Number(process.env["VERIFY_JOBS"]) || 5);
 
 function option(name: string): string[] {
   const index = process.argv.indexOf(`--${name}`);
