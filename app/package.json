@@ -7,7 +7,27 @@
   "engines": {
     "node": ">=24"
   },
-  "scripts": {},
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/check-build.ts",
+    "preview": "vite preview",
+    "types": "wrangler types --strict-vars false",
+    "typecheck": "npm run --silent types && tsc -b",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:worker": "vitest run --project worker",
+    "test:e2e": "node scripts/e2e.ts",
+    "seed": "node scripts/seed.ts",
+    "reset": "node scripts/reset.ts",
+    "screenshots": "node scripts/screenshots.ts",
+    "test:visual": "node scripts/visual.ts",
+    "test:visual:update": "node scripts/visual.ts --update",
+    "verify": "node scripts/verify.ts",
+    "setup": "playwright install chromium"
+  },
   "dependencies": {
     "@base-ui/react": "1.9.0",
     "@hono/standard-validator": "0.4.1",

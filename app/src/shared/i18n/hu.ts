@@ -22,4 +22,13 @@ export const hu = {
   "nav.backToHome": "Vissza a kezdőlapra",
   "notFound.title": "Az oldal nem található",
   "notFound.description": "Ezen a címen nincs semmi.",
+  "api.error.not_configured": "A szolgáltatás még nincs beállítva.",
+  "api.error.invalid_request":
+    "Néhány adatot nem fogadtunk el. Ellenőrizze őket, majd próbálja újra.",
+  "api.error.not_found": "Ez nem található.",
+  "api.error.rate_limited": "Túl sok próbálkozás. Kérjük, várjon egy kicsit, majd próbálja újra.",
+  "api.error.internal_error": "Hiba történt a szolgáltatás oldalán. Kérjük, próbálja meg később.",
+  "api.error.network_error": "A szolgáltatás nem érhető el. Ellenőrizze az internetkapcsolatot.",
+  "api.error.invalid_response":
+    "A szolgáltatás váratlan választ adott. Kérjük, próbálja meg később.",
 } as const satisfies PartialCatalog;

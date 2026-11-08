@@ -1,3 +1,5 @@
+import type { ApiErrorCode } from "../api/endpoints.ts";
+
 /**
  * The English catalog: it defines the flat, dotted MessageKey set (SPEC 2.5) and is the per-key fallback.
  * Every other language is a Partial of it. Fixed system wording only; Deployment-authored wording
@@ -25,4 +27,11 @@ export const en = {
   "nav.backToHome": "Back to the home page",
   "notFound.title": "Page not found",
   "notFound.description": "There is nothing at this address.",
-} as const satisfies Record<string, string>;
+  "api.error.not_configured": "This service is not set up yet.",
+  "api.error.invalid_request": "Some of the information was not accepted. Check it and try again.",
+  "api.error.not_found": "This could not be found.",
+  "api.error.rate_limited": "Too many attempts. Please wait a moment and try again.",
+  "api.error.internal_error": "Something went wrong on our side. Please try again later.",
+  "api.error.network_error": "The service could not be reached. Check your internet connection.",
+  "api.error.invalid_response": "The service sent an unexpected answer. Please try again later.",
+} as const satisfies Record<string, string> & Record<`api.error.${ApiErrorCode}`, string>;
