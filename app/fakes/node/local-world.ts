@@ -77,9 +77,12 @@ export async function planLocalWorld(
   const setting = (name: string) => devVars[name] ?? environment[name];
 
   let privateKey = setting("BOT_APP_PRIVATE_KEY");
+  let generatedKey: string | undefined;
   if (privateKey === undefined || privateKey === "") {
     // No key configured: make a throwaway one for this process. Nothing is written to disk.
     privateKey = (await generateAppKeyPair()).privateKeyPkcs1;
+    generatedKey = privateKey;
+    // Wrangler reads secrets from the environment only when there is no .dev.vars: the variable below covers that case.
     environment["BOT_APP_PRIVATE_KEY"] = privateKey;
   } else if (!privateKey.includes("-----BEGIN")) {
     console.warn(
@@ -117,6 +120,7 @@ export async function planLocalWorld(
       STAFF_APP_CLIENT_ID: LOCAL_STAFF_CLIENT_ID,
       // Switches on the dev-only smoke routes (src/worker/dev/): they do not exist in production.
       LOCAL_WORLD: "1",
+      ...(generatedKey ? { BOT_APP_PRIVATE_KEY: generatedKey } : {}),
     },
   };
 }

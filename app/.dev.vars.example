@@ -1,5 +1,11 @@
 # Copy to .dev.vars (git-ignored). Local development reads only the keys listed under `secrets.required`
-# in wrangler.jsonc. The fake GitHub and fake Resend (ticket #22) accept any non-empty value here.
+# in wrangler.jsonc. `vite dev` hosts a fake GitHub and a fake Resend (ticket #22): they accept any
+# non-empty RESEND_API_KEY.
 RESEND_API_KEY=re_local_development_key
-BOT_APP_PRIVATE_KEY=local-development-placeholder
 GITHUB_WEBHOOK_SECRET=local-development-webhook-secret
+
+# BOT_APP_PRIVATE_KEY is deliberately not set: the dev server then generates a throwaway RSA key for the fake
+# GitHub App and verifies the Bot's JWTs with it. Set it only to try a real key, in the PEM form GitHub gives
+# you (PKCS#1 or PKCS#8), with its newlines written as \n inside double quotes:
+# BOT_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+# A value that is not a PEM key (a placeholder) breaks the Bot's sign-in: leave the line out instead.

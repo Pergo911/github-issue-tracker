@@ -25,14 +25,15 @@ Run everything from `app/`, with npm. `package.json` has the full script list; t
 | `npm run verify -- --fast` | typecheck, lint, format, unit, worker, tooling: no browser, no Docker | while you work |
 | `npm run typecheck` | `wrangler types`, then `tsc -b` over client, worker, shared, tests, tooling | after type-level changes |
 | `npm run lint` · `npm run format` | ESLint (`format:check` is Prettier's check) | before committing |
-| `npm run test:unit` | Vitest in Node: `shared/`, client logic, lint rules, catalog completeness (about 2 s) | on every `shared/` or client-logic change |
-| `npm run test:worker` | Vitest in the local Workers runtime: KV, Durable Objects, rate limits | on every Worker change |
+| `npm run test:unit` | Vitest in Node: `shared/`, client logic, the fakes (`fakes/`), lint rules, catalog completeness (about 3 s) | on every `shared/` or client-logic change |
+| `npm run test:worker` | Vitest in the local Workers runtime, against the fake GitHub and Resend: KV, Durable Objects, rate limits | on every Worker change |
 | `npm run test:tooling` | compile-time boundaries, seed and reset, chunk check | after touching tsconfig, scripts or the build |
 | `npm run test:e2e` | Playwright against the real dev server: journeys, axe, pseudo-language sweep | after UI or API changes |
 | `npm run screenshots` | every declared screen, light and dark, 1280 and 375 px, Hungarian, in your local browser | for every screen you add or change |
 | `npm run test:visual` | the same screens against `e2e/reference/*.png`, rendered in Playwright's Docker image | in `verify`; run it alone after UI changes |
 | `npm run test:visual:update` | rewrites the reference images | only after you opened the diffs and each change is intended |
-| `npm run dev` · `npm run seed` · `npm run reset` | the dev server · Appendix A configuration into local KV · clear all local state | seed once per worktree before `dev` |
+| `npm run dev` · `npm run seed` · `npm run reset` | the dev server (it hosts the fake GitHub and Resend) · Appendix A configuration into local KV · clear all local state | seed once per worktree before `dev` |
+| `npm run world -- <method> [arg ...]` | drives the running local world: seed Reports and Staff users, approve a device code, read the outbox, inject faults | with `npm run dev` running; see below |
 
 `npm run setup` installs the Chromium that `test:e2e` and `screenshots` use. `npm run test:visual` needs Docker
 running. Extra arguments reach Playwright: `npm run test:e2e -- -g "home page"`. Run Playwright through these
@@ -74,7 +75,10 @@ Component tests need a DOM: add `happy-dom` to the `unit` project when the first
 - **One API contract.** A new endpoint is declared in `src/shared/api/endpoints.ts` (method, `/api/` path, Zod
   request schema, `type<Response>()`, error codes with HTTP statuses), registered in the Worker through
   `registerEndpoint`, and called from the SPA through `callApi`. Every error code needs an `api.error.<code>`
-  message in `en.ts` and `hu.ts`; the types enforce it. Path parameters are not in the contract yet: extend
+  message in `en.ts` and `hu.ts`; the types enforce it. An endpoint that declares `role: "viewer" | "maintenance" | "admin"`
+  is gated: `registerEndpoint` installs `requireRole` for it (the caller's GitHub token as `Authorization: Bearer`, checked
+  against the repo `permissions`, failing closed) and the handler receives `caller`; a gated endpoint cannot be registered
+  without its gate. Path parameters are not in the contract yet: extend
   `defineEndpoint`, `registerEndpoint` and `callApi` together, with a test, when a ticket needs them.
 - **Words live in the catalog.** Add each string to `src/shared/i18n/en.ts` and `hu.ts` and render
   `t("key")`; the catalog test fails when `hu` lacks one, and `reports/no-literal-text` rejects text in JSX.
@@ -86,12 +90,52 @@ Component tests need a DOM: add `happy-dom` to the `unit` project when the first
   `npx shadcn add`).
 - **Bindings and secrets** are declared once in `wrangler.jsonc` (secrets under `secrets.required`, mirrored in
   `.dev.vars.example`); run `npm run types` after editing it. Worker tests get the secrets as fixed values
-  from `vitest.config.ts`.
+  from `vitest.config.ts` (the Bot key is a throwaway generated per run). The GitHub and Resend base URLs are plain
+  `vars`, defaulting to the real services.
 - **Versions are pinned, and two are held back on purpose.** TypeScript stays on 6.0.x until typescript-eslint
   supports 7. npm 12 blocks install scripts unless `package.json` lists them under `allowScripts` (`esbuild`,
   `workerd`).
 - **Scripts run as native TypeScript** (Node strips the types): erasable syntax only, `.ts` extensions on
   relative imports, no path aliases under `scripts/`.
+
+### The local world: a fake GitHub and a fake Resend
+
+`vite dev` is the whole local world. It hosts stateful fakes of `api.github.com`, github.com's device-flow
+endpoints and `api.resend.com` (`fakes/`), points the Worker's variables (`GITHUB_API_BASE`, `GITHUB_WEB_BASE`,
+`RESEND_API_BASE`) and the SPA's build-time `VITE_GITHUB_API_BASE` at them, and prints the URL. In production the
+variables are the real services (the defaults in `wrangler.jsonc`) and `vite build` never hosts the fakes. The
+fakes keep their state in memory: a dev-server restart is a reset.
+
+- **Run, seed, inspect.** Start `npm run dev`, then `npm run world -- seed` (the Appendix A labels, one Staff user
+  per role with its token, a few Reports), `summary` (everything, tokens included), `outbox` and
+  `latestMailTo <address>` (read the OTP there), `deviceCodes` and `approveDeviceCode <ABCD-EFGH> <login>` (sign a
+  Staff member in), `addFault '<json>'`, `reset`. Every method of the `Control` interface in `fakes/control.ts` works;
+  `GET <world url>/control/summary` works in a browser. `npm run world` finds the world through
+  `<PERSIST_DIR>/world.json` (or `WORLD_URL`). The Worker's smoke routes `POST /api/_dev/smoke` and
+  `GET /api/_dev/whoami` exist only there (`LOCAL_WORLD`), as the demo.
+- **What the fakes model.** Issues, labels, comments, the timeline, search, the repo `permissions` per token, App JWT
+  checking, installation tokens, device flow (every outcome scriptable), signed `issues` webhooks with switches for
+  duplicate and out-of-order delivery, CORS, and faults (timeout, 5xx, "created, but the response was lost"). The
+  fakes are stricter than GitHub in one way on purpose: they require `User-Agent` and `X-GitHub-Api-Version: 2022-11-28`
+  (the one constant in `shared/github/constants.ts`). Where live GitHub is unconfirmed (unknown labels, whether Triage
+  may set labels in a PATCH) a `configure` switch picks the behaviour; ticket #32 settles them.
+- **Worker tests** (`test:worker`) get the same world in the Workers isolate: `fakeWorld()`, `fakeClient()` and
+  `addToAllowlist(email)` from `src/worker/testing/world.ts`, reset before every test (`setup.ts`). The fakes answer the
+  Worker's outbound `fetch` at `https://world.test`; any other outbound request fails the test.
+- **End-to-end tests** import `test` from `e2e/support/test.ts`, not from `@playwright/test`: it adds the `world` fixture
+  (the seeded server's control API; `worldOf("empty")` for the other) and the invariant check below. Tests of one run
+  share a server's world, so never `reset` in a test: name your own data.
+- **The shared invariant: no Allowlist email address is written to GitHub** (SPEC 4.1, 5). Every write to the fake
+  GitHub is scanned for the addresses registered with `protectEmail`. Worker tests also register every `allowlist:` key in
+  KV when a test ends, so any Worker test is covered without asking; an end-to-end test that adds an Allowlist entry calls
+  `world.protectEmail(address)`. A violation fails the test that was running.
+- **The fakes' tests** (`fakes/**/*.test.ts`, in `test:unit`) hold the fakes to GitHub's and Resend's documented
+  behaviour. Change a fake together with its test, and keep `fakes/` free of `src/client` and `src/worker` (it has its own
+  tsconfig, DOM lib only, so it runs in Node and in workerd). `vite.config.ts` loads `fakes/node/` as plain Node: no path
+  aliases there (relative imports, `.ts` extensions).
+- **The Bot key.** Without `BOT_APP_PRIVATE_KEY` in `.dev.vars` or the environment, the dev server generates a throwaway
+  key for the fake App. `src/worker/github/app-jwt.ts` accepts GitHub's PKCS#1 PEM as downloaded and PKCS#8, so
+  `wrangler secret put BOT_APP_PRIVATE_KEY < app.pem` works unchanged.
 
 ### Parallel runs
 
