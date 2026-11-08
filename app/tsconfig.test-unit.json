@@ -18,8 +18,17 @@
     "src/client/**/*.test.tsx"
   ],
   "references": [
-    { "path": "./tsconfig.shared.json" },
-    { "path": "./tsconfig.client.json" },
-    { "path": "./tsconfig.fakes.json" }
+    {
+      "path": "./tsconfig.shared.json"
+    },
+    {
+      "path": "./tsconfig.client.json"
+    },
+    {
+      "path": "./tsconfig.fakes.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
   ]
 }

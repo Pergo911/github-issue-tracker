@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { installApiErrorHandling } from "./api/errors.ts";
+import { registerLocalWorld } from "./dev/local-world.ts";
 import { registerPublicConfig } from "./routes/public-config.ts";
 
 /**
@@ -10,3 +11,4 @@ export const app = new Hono<{ Bindings: Env }>();
 
 installApiErrorHandling(app);
 registerPublicConfig(app);
+registerLocalWorld(app);
