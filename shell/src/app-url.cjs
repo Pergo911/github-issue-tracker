@@ -30,8 +30,7 @@ function resolveAppUrl({ isPackaged, metadataUrl, environmentUrl }) {
   }
 
   const secure = url.protocol === "https:";
-  const localDevelopment =
-    !isPackaged && url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname);
+  const localDevelopment = !isPackaged && url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname);
   if (!secure && !localDevelopment) {
     throw new Error(
       isPackaged

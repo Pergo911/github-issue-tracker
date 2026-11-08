@@ -15,7 +15,11 @@ describe("resolveAppUrl: where the shell loads", () => {
     });
 
     it("refuses plain http, even to localhost", () => {
-      for (const url of ["http://reports.example.org", "http://localhost:5173", "http://127.0.0.1"]) {
+      for (const url of [
+        "http://reports.example.org",
+        "http://localhost:5173",
+        "http://127.0.0.1",
+      ]) {
         assert.throws(() => resolveAppUrl({ isPackaged: true, metadataUrl: url }), /HTTPS/);
       }
     });
@@ -48,7 +52,11 @@ describe("resolveAppUrl: where the shell loads", () => {
     });
 
     it("still refuses http to anything else", () => {
-      for (const url of ["http://example.org", "http://localhost.evil.example", "http://192.168.1.5"]) {
+      for (const url of [
+        "http://example.org",
+        "http://localhost.evil.example",
+        "http://192.168.1.5",
+      ]) {
         assert.throws(() => resolveAppUrl({ isPackaged: false, environmentUrl: url }), /HTTPS/);
       }
     });
