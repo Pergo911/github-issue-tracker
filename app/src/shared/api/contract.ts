@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { StaffRole } from "../github/roles.ts";
 
 /**
  * Contract-first API (SPEC 2.6). Each endpoint declares its method, path, a Zod request schema,
@@ -20,6 +21,12 @@ export const COMMON_ERROR_STATUS = {
   not_found: 404,
   rate_limited: 429,
   internal_error: 500,
+  /** A gated endpoint was called without a (valid) GitHub token. */
+  unauthorized: 401,
+  /** The caller is signed in but lacks the role the endpoint declares, or is not a member (SPEC 2.4). */
+  forbidden: 403,
+  /** The role check could not ask GitHub: it fails closed. */
+  upstream_unavailable: 502,
 } as const;
 export type CommonErrorCode = keyof typeof COMMON_ERROR_STATUS;
 
@@ -33,6 +40,7 @@ export interface Endpoint<
   Req extends z.ZodType = z.ZodType,
   Res = unknown,
   Errors extends Record<string, number> = Record<string, number>,
+  Role extends StaffRole | undefined = StaffRole | undefined,
 > {
   readonly method: M;
   readonly path: P;
@@ -41,6 +49,12 @@ export interface Endpoint<
   readonly response: Res;
   /** The endpoint's own error codes and the HTTP status each travels with. */
   readonly errors: Errors;
+  /**
+   * The lowest dashboard role allowed to call it. Declaring it is what gates the endpoint: `registerEndpoint`
+   * installs `requireRole` for it, so a gated endpoint cannot be registered without its gate (SPEC 2.4). A
+   * caller sends their GitHub token as `Authorization: Bearer`. Leave it out for a public endpoint.
+   */
+  readonly role?: Role;
 }
 
 export type AnyEndpoint = Endpoint<
@@ -48,7 +62,8 @@ export type AnyEndpoint = Endpoint<
   `/api/${string}`,
   z.ZodType,
   unknown,
-  Record<string, number>
+  Record<string, number>,
+  StaffRole | undefined
 >;
 
 export function defineEndpoint<
@@ -57,7 +72,8 @@ export function defineEndpoint<
   Req extends z.ZodType,
   Res,
   const Errors extends Record<string, number>,
->(endpoint: Endpoint<M, P, Req, Res, Errors>): Endpoint<M, P, Req, Res, Errors> {
+  const Role extends StaffRole | undefined = undefined,
+>(endpoint: Endpoint<M, P, Req, Res, Errors, Role>): Endpoint<M, P, Req, Res, Errors, Role> {
   return endpoint;
 }
 

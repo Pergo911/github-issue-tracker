@@ -32,6 +32,10 @@ export const en = {
   "api.error.not_found": "This could not be found.",
   "api.error.rate_limited": "Too many attempts. Please wait a moment and try again.",
   "api.error.internal_error": "Something went wrong on our side. Please try again later.",
+  "api.error.unauthorized": "You are not signed in. Sign in with GitHub and try again.",
+  "api.error.forbidden": "Your GitHub account does not have access to this.",
+  "api.error.upstream_unavailable":
+    "GitHub could not be reached to check your access. Please try again later.",
   "api.error.network_error": "The service could not be reached. Check your internet connection.",
   "api.error.invalid_response": "The service sent an unexpected answer. Please try again later.",
 } as const satisfies Record<string, string> & Record<`api.error.${ApiErrorCode}`, string>;

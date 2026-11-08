@@ -28,6 +28,10 @@ export const hu = {
   "api.error.not_found": "Ez nem található.",
   "api.error.rate_limited": "Túl sok próbálkozás. Kérjük, várjon egy kicsit, majd próbálja újra.",
   "api.error.internal_error": "Hiba történt a szolgáltatás oldalán. Kérjük, próbálja meg később.",
+  "api.error.unauthorized": "Nincs bejelentkezve. Jelentkezzen be GitHubbal, majd próbálja újra.",
+  "api.error.forbidden": "A GitHub-fiókjának nincs hozzáférése ehhez.",
+  "api.error.upstream_unavailable":
+    "A hozzáférés ellenőrzéséhez nem sikerült elérni a GitHubot. Kérjük, próbálja meg később.",
   "api.error.network_error": "A szolgáltatás nem érhető el. Ellenőrizze az internetkapcsolatot.",
   "api.error.invalid_response":
     "A szolgáltatás váratlan választ adott. Kérjük, próbálja meg később.",

@@ -1,5 +1,5 @@
 import { sValidator } from "@hono/standard-validator";
-import type { Context, Hono } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import {
   statusOf,
   type AnyEndpoint,
@@ -7,9 +7,17 @@ import {
   type ResponseOf,
   type WireErrorCodeOf,
 } from "@shared/api/endpoints.ts";
+import { requireRole, type StaffCaller } from "../auth/require-role.ts";
 import { ApiFailure, commonErrorResponse, errorResponse } from "./errors.ts";
 
+/** The caller of a gated endpoint (one that declares a `role`); a public endpoint has none. */
+export type CallerOf<E extends AnyEndpoint> = [E["role"]] extends [undefined]
+  ? undefined
+  : StaffCaller;
+
 export interface HandlerContext<E extends AnyEndpoint> {
+  /** Who is calling, verified against the repo `permissions` by `requireRole`. Only gated endpoints have one. */
+  caller: CallerOf<E>;
   /** The request, already validated against the endpoint's Zod schema. */
   input: ParsedRequestOf<E>;
   env: Env;
@@ -38,10 +46,16 @@ export function registerEndpoint<E extends AnyEndpoint>(
     return undefined;
   });
 
-  app.on(endpoint.method, endpoint.path, validate, async (c: Context<{ Bindings: Env }>) => {
+  // The gate comes first: an unauthenticated caller learns nothing, not even whether their body was valid.
+  const gate = endpoint.role ? [requireRole(endpoint.role)] : [];
+
+  const main = async (c: Context<{ Bindings: Env }>) => {
     const input = (c.req as unknown as { valid(target: string): unknown }).valid(target);
     try {
       const result = await handler({
+        caller: (endpoint.role
+          ? (c as unknown as Context<{ Variables: { caller: StaffCaller } }>).get("caller")
+          : undefined) as CallerOf<E>,
         input: input as ParsedRequestOf<E>,
         env: c.env,
         request: c.req.raw,
@@ -57,5 +71,11 @@ export function registerEndpoint<E extends AnyEndpoint>(
       console.error("unhandled error in", endpoint.method, endpoint.path, error);
       return commonErrorResponse("internal_error");
     }
-  });
+  };
+
+  const handlers = [...gate, validate, main] as unknown as [
+    MiddlewareHandler,
+    ...MiddlewareHandler[],
+  ];
+  app.on(endpoint.method, endpoint.path, ...handlers);
 }

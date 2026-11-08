@@ -6,9 +6,17 @@
     "lib": ["ES2023"],
     "types": ["node"],
     "paths": {
-      "@shared/*": ["./src/shared/*"]
+      "@shared/*": ["./src/shared/*"],
+      "@fakes/*": ["./fakes/*"]
     }
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "eslint-rules/**/*.ts"],
-  "references": [{ "path": "./tsconfig.shared.json" }]
+  "include": ["vite.config.ts", "vitest.config.ts", "eslint-rules/**/*.ts", "fakes/node/**/*.ts"],
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    },
+    {
+      "path": "./tsconfig.fakes.json"
+    }
+  ]
 }
