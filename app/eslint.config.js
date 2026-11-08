@@ -3,7 +3,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
-import { plugin as reports } from "./eslint-rules/index.ts";
+import { scopedRules } from "./eslint-rules/scopes.ts";
 
 export default defineConfig([
   globalIgnores([
@@ -40,29 +40,15 @@ export default defineConfig([
   // Plain JavaScript (this file) is not type-checked.
   { files: ["**/*.js"], extends: [tseslint.configs.disableTypeChecked] },
 
-  // The client: React, the DOM, and this repo's rules for components.
+  // The client: React and the DOM.
   {
     files: ["src/client/**/*.{ts,tsx}"],
-    plugins: { reports, "react-hooks": reactHooks },
+    plugins: { "react-hooks": reactHooks },
     languageOptions: { globals: globals.browser },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      "reports/no-layer-crossing": "error",
-      "reports/no-literal-text": "error",
-      "reports/no-hardcoded-colors": "error",
-    },
+    rules: reactHooks.configs.recommended.rules,
   },
-  // Tests may write literals and colours, to test them.
-  {
-    files: ["src/client/**/*.test.{ts,tsx}"],
-    rules: { "reports/no-literal-text": "off", "reports/no-hardcoded-colors": "off" },
-  },
-  // The Worker and the shared module keep to their own side.
-  {
-    files: ["src/worker/**/*.ts", "src/shared/**/*.ts"],
-    plugins: { reports },
-    rules: { "reports/no-layer-crossing": "error" },
-  },
+  // This repo's own rules, and where each applies (eslint-rules/scopes.ts, tested in scopes.test.ts).
+  ...scopedRules,
   // Tooling, end-to-end tests and configuration run in Node, or drive a browser.
   {
     files: ["scripts/**/*.ts", "e2e/**/*.ts", "eslint-rules/**/*.ts", "*.config.{ts,js}"],
