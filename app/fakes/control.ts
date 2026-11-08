@@ -141,7 +141,10 @@ export function asAsync(control: Control): AsyncControl {
   return new Proxy(control, {
     get: (target, name: string) => {
       const method = (target as unknown as Record<string, (...args: unknown[]) => unknown>)[name];
-      return async (...args: unknown[]) => method?.apply(target, args);
+      return (...args: unknown[]) =>
+        new Promise((resolve) => {
+          resolve(method?.apply(target, args));
+        });
     },
   }) as unknown as AsyncControl;
 }

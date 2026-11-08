@@ -51,7 +51,13 @@ export default defineConfig([
   ...scopedRules,
   // Tooling, end-to-end tests and configuration run in Node, or drive a browser.
   {
-    files: ["scripts/**/*.ts", "e2e/**/*.ts", "eslint-rules/**/*.ts", "*.config.{ts,js}"],
+    files: [
+      "scripts/**/*.ts",
+      "e2e/**/*.ts",
+      "eslint-rules/**/*.ts",
+      "*.config.{ts,js}",
+      "fakes/node/**/*.ts",
+    ],
     languageOptions: { globals: { ...globals.node } },
   },
   // The typescript-eslint AST node types are string enums, compared here by their string values.
@@ -61,12 +67,14 @@ export default defineConfig([
   },
   // Tests assert on loosely typed JSON on purpose.
   {
-    files: ["**/*.test.ts", "e2e/**/*.ts"],
+    files: ["**/*.test.ts", "e2e/**/*.ts", "fakes/testing/**/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-assignment": "off",
       "@typescript-eslint/no-unsafe-member-access": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/unbound-method": "off",
     },
   },

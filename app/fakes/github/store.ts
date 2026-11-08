@@ -320,7 +320,7 @@ export class GitHubStore {
       actor: actor.login,
       createdAt: this.clock.now(),
       ...detail,
-    } as TimelineRecord);
+    });
   }
 
   createIssue(

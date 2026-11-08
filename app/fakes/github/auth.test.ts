@@ -157,7 +157,7 @@ describe("installation-token exchange", () => {
     ],
     ["a JWT with a broken signature", {}, (jwt: string) => `${jwt.slice(0, -4)}AAAA`],
   ] as const)("refuses %s with 401", async (_name, overrides, mutate) => {
-    const { reply } = await exchange(overrides as never, mutate);
+    const { reply } = await exchange(overrides, mutate);
     expect(reply.status).toBe(401);
     expect(reply.json.message).toBeTruthy();
   });

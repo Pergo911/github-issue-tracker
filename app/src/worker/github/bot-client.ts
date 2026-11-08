@@ -159,7 +159,7 @@ export function createBotClient(env: BotClientEnv, deps: BotClientDeps = {}): Bo
   ): Promise<GitHubApiError> {
     let body: GitHubErrorBody | undefined;
     try {
-      body = (await response.json()) as GitHubErrorBody;
+      body = await response.json<GitHubErrorBody>();
     } catch {
       body = undefined;
     }
@@ -180,7 +180,7 @@ export function createBotClient(env: BotClientEnv, deps: BotClientDeps = {}): Bo
       },
     });
     if (!response.ok) throw await readError("POST", path, response);
-    const minted = (await response.json()) as GitHubInstallationToken;
+    const minted = await response.json<GitHubInstallationToken>();
     cached = { token: minted.token, expiresAt: Date.parse(minted.expires_at) };
     return minted.token;
   }

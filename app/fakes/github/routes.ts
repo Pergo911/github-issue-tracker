@@ -419,9 +419,7 @@ export class GitHubService {
         throw validation("duplicate_issue_id", "invalid");
       const { issue, events } = this.#store.updateIssue(actor, Number(c.params["number"]), {
         ...(title !== undefined ? { title: title as string } : {}),
-        ...(body["body"] !== undefined
-          ? { body: optionalString(body["body"], "body", true) as string | null }
-          : {}),
+        ...(body["body"] !== undefined ? { body: optionalString(body["body"], "body", true) } : {}),
         ...(state !== undefined ? { state } : {}),
         ...(reason !== undefined ? { state_reason: reason as StateReason | null } : {}),
         ...(duplicate !== undefined ? { duplicate_issue_id: duplicate as number } : {}),
@@ -522,8 +520,7 @@ export class GitHubService {
           : {}),
         ...(body["description"] !== undefined
           ? {
-              description: optionalString(body["description"], "description", true) as
-                string | null,
+              description: optionalString(body["description"], "description", true),
             }
           : {}),
       });
@@ -591,7 +588,7 @@ export class GitHubService {
     }
     if (parsedHeader["alg"] !== "RS256") throw reject("alg must be RS256");
     this.#publicKey ??= importPublicKey(this.#deps.bot.publicKey);
-    let valid = false;
+    let valid: boolean;
     try {
       valid = await crypto.subtle.verify(
         "RSASSA-PKCS1-v1_5",

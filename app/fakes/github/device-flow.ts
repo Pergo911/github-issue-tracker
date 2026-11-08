@@ -43,6 +43,11 @@ export interface DeviceCodeInfo {
   expiresAt: number;
 }
 
+/** A request parameter as text; anything but a string is empty (and so matches nothing). */
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 function userCode(): string {
   const letters = "BCDFGHJKLMNPQRSTVWXZ";
   const pick = () => letters[crypto.getRandomValues(new Uint8Array(1))[0]! % letters.length]!;
@@ -123,7 +128,7 @@ export class DeviceFlow {
         error_description: "The grant type must be urn:ietf:params:oauth:grant-type:device_code.",
       };
     }
-    const record = this.#codes.get(String(params["device_code"] ?? ""));
+    const record = this.#codes.get(text(params["device_code"]));
     if (!record || record.consumed) {
       return {
         error: "incorrect_device_code",
@@ -172,7 +177,7 @@ export class DeviceFlow {
   }
 
   #refresh(params: Record<string, unknown>): DeviceTokenResponse | DeviceFlowError {
-    const pair = this.#tokens.refresh(String(params["refresh_token"] ?? ""));
+    const pair = this.#tokens.refresh(text(params["refresh_token"]));
     if (!pair) {
       return {
         error: "bad_refresh_token",

@@ -440,7 +440,7 @@ export function createWorld(options: WorldOptions): World {
       return jsonResponse({ error: `Unknown control method "${name}"` }, 404);
     }
     const text = await request.text();
-    let args: unknown[] = [];
+    let args: unknown[];
     try {
       const parsed: unknown = text.trim() === "" ? [] : JSON.parse(text);
       if (!Array.isArray(parsed)) throw new Error("the body must be the JSON array of arguments");

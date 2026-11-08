@@ -56,8 +56,8 @@ export async function resolveStaff(
       return { ok: false, reason: "forbidden" };
     }
     if (!repoResponse.ok || !userResponse.ok) return { ok: false, reason: "upstream_unavailable" };
-    const repository = (await repoResponse.json()) as Partial<GitHubRepository>;
-    const user = (await userResponse.json()) as Partial<GitHubUser>;
+    const repository = await repoResponse.json<Partial<GitHubRepository>>();
+    const user = await userResponse.json<Partial<GitHubUser>>();
     const role = roleFromPermissions(repository.permissions);
     if (role === null || typeof user.login !== "string") return { ok: false, reason: "forbidden" };
     return { ok: true, caller: { role, login: user.login, token } };
