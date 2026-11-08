@@ -222,6 +222,20 @@ describe("the invariant: no Allowlist email address is ever written to GitHub", 
     expect(control.takeViolations()).toHaveLength(1);
   });
 
+  it("also catches a write made before the address was registered, so a test can register Allowlist entries last", async () => {
+    const { client, control, bot, path } = await setup();
+    await client.github("POST", path("/issues"), {
+      token: bot,
+      json: { title: "t", body: address },
+    });
+    expect(control.takeViolations()).toEqual([]);
+    control.protectEmail(address);
+    expect(control.takeViolations()).toHaveLength(1);
+    // Registering it again finds nothing new.
+    control.protectEmail(address);
+    expect(control.takeViolations()).toEqual([]);
+  });
+
   it("ignores reads, and empties its list once taken", async () => {
     const { client, control, bot, path } = await setup();
     control.protectEmail(address);

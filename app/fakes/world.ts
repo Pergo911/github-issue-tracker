@@ -102,9 +102,34 @@ export function createWorld(options: WorldOptions): World {
 
   // ----------------------------------------------------------------------------------- invariant
 
-  /** SPEC 4.1, 5: the Reporter's email is never written into GitHub. Every write is scanned for any address registered with `protectEmail`. */
+  interface LoggedWrite {
+    method: string;
+    path: string;
+    /** Lower-cased body text plus every string in it (so JSON escapes are decoded). */
+    body: string;
+    /** Lower-cased, decoded path and query. */
+    url: string;
+  }
+  const writeLog: LoggedWrite[] = [];
+  const MAX_LOGGED_WRITES = 5000;
+
+  function matchesAddress(write: LoggedWrite, address: string): Violation | null {
+    if (write.body.includes(address)) {
+      return { method: write.method, path: write.path, address, where: "body" };
+    }
+    if (write.url.includes(address)) {
+      return { method: write.method, path: write.path, address, where: "url" };
+    }
+    return null;
+  }
+
+  /**
+   * SPEC 4.1, 5: the Reporter's email is never written into GitHub. Every write is logged and scanned for the
+   * addresses registered with `protectEmail`; an address registered later is checked against the log too, so
+   * a test can register its Allowlist entries last.
+   */
   async function checkWrite(request: Request, path: string): Promise<void> {
-    if (protectedEmails.size === 0 || !WRITE_METHODS.has(request.method)) return;
+    if (!WRITE_METHODS.has(request.method)) return;
     const text = await request.clone().text();
     const strings: string[] = [];
     try {
@@ -112,7 +137,6 @@ export function createWorld(options: WorldOptions): World {
     } catch {
       strings.push(text);
     }
-    const body = [text, ...strings].join("\n").toLowerCase();
     let url = path.toLowerCase();
     try {
       url = decodeURIComponent(url);
@@ -120,12 +144,17 @@ export function createWorld(options: WorldOptions): World {
       // keep the raw path
     }
     url += `?${new URL(request.url).searchParams.toString()}`.toLowerCase();
+    const write: LoggedWrite = {
+      method: request.method,
+      path,
+      body: [text, ...strings].join(" | ").toLowerCase(),
+      url,
+    };
+    writeLog.push(write);
+    if (writeLog.length > MAX_LOGGED_WRITES) writeLog.shift();
     for (const address of protectedEmails) {
-      if (body.includes(address)) {
-        violations.push({ method: request.method, path, address, where: "body" });
-      } else if (url.includes(address)) {
-        violations.push({ method: request.method, path, address, where: "url" });
-      }
+      const violation = matchesAddress(write, address);
+      if (violation) violations.push(violation);
     }
   }
 
@@ -260,6 +289,7 @@ export function createWorld(options: WorldOptions): World {
       resend.reset();
       faults.length = 0;
       protectedEmails.clear();
+      writeLog.length = 0;
       violations = [];
       clock.reset();
       verifiedDomains = [...(options.verifiedDomains ?? [])];
@@ -385,7 +415,13 @@ export function createWorld(options: WorldOptions): World {
     clockNow: () => clock.now(),
 
     protectEmail(address) {
-      protectedEmails.add(address.trim().toLowerCase());
+      const normalised = address.trim().toLowerCase();
+      if (protectedEmails.has(normalised)) return;
+      protectedEmails.add(normalised);
+      for (const write of writeLog) {
+        const violation = matchesAddress(write, normalised);
+        if (violation) violations.push(violation);
+      }
     },
     takeViolations() {
       const taken = violations;
