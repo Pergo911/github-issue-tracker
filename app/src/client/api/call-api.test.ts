@@ -32,6 +32,16 @@ const jsonResponse = (body: unknown, status = 200) => Response.json(body, { stat
 afterEach(() => vi.unstubAllGlobals());
 
 describe("callApi", () => {
+  it("sends a Staff member's GitHub token as a Bearer credential when given one", async () => {
+    const stub = stubFetch(() => jsonResponse({ hits: [] }));
+    await callApi(search, { q: "x" }, { token: "ghu_abc" });
+    expect(new Headers(stub.mock.calls[0]![1]?.headers).get("authorization")).toBe(
+      "Bearer ghu_abc",
+    );
+    await callApi(search, { q: "x" });
+    expect(new Headers(stub.mock.calls[1]![1]?.headers).has("authorization")).toBe(false);
+  });
+
   it("calls an endpoint by its declared method and path, and returns the typed JSON", async () => {
     const stub = stubFetch(() => jsonResponse({ language: "hu" }));
     const result = await callApi(endpoints.publicConfig);

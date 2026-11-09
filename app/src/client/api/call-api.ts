@@ -21,6 +21,8 @@ export class ApiError extends Error {
 
 export interface CallOptions {
   signal?: AbortSignal;
+  /** A Staff member's GitHub token, for an endpoint that declares a `role`. */
+  token?: string;
 }
 
 /** The input is optional exactly when an empty object satisfies the schema. */
@@ -52,6 +54,7 @@ export async function callApi<E extends AnyEndpoint>(
   const headers = new Headers({ accept: "application/json" });
   const init: RequestInit = { method: endpoint.method, headers };
   if (options?.signal) init.signal = options.signal;
+  if (options?.token) headers.set("authorization", `Bearer ${options.token}`);
   let url: string = endpoint.path;
   if (endpoint.method === "GET" || endpoint.method === "DELETE") {
     if (input) url += queryString(input);
