@@ -100,12 +100,15 @@ const deviceCode = {
 
 const issuesUrl = /\/repos\/[^/]+\/[^/]+\/issues\?/;
 
+// The first visit to /staff makes the dev server transform the whole staff chunk: on a busy machine (verify runs
+// the visual and end-to-end steps together) that takes longer than Playwright's default 10 s.
+const SLOW = { timeout: 30_000 };
 const headingShown = async (page: Page) => {
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible(SLOW);
 };
 const reportsShown = async (page: Page) => {
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.locator("[data-report]").first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible(SLOW);
+  await expect(page.locator("[data-report]").first()).toBeVisible(SLOW);
 };
 
 /** Signs in as a Staff user and serves the given Reports (and search hits). */
