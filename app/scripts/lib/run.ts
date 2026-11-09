@@ -50,7 +50,15 @@ export async function prepareRun(): Promise<Run> {
       E2E_FAKES_PORT_EMPTY: String(emptyFakes),
       E2E_RUN_DIR: directory,
     },
-    cleanup: () => rmSync(directory, { recursive: true, force: true }),
+    cleanup: () => {
+      // On Windows the dev servers' workerd can hold files for a moment after Playwright exits (EPERM).
+      // Retry, then leave the git-ignored scratch folder behind: it must never change the run's result.
+      try {
+        rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      } catch {
+        console.warn(`could not remove ${directory}; delete it by hand`);
+      }
+    },
   };
 }
 
