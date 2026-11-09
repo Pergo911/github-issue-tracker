@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { AllowlistEntry, BulkLineError } from "../allowlist/entries.ts";
+import { MAX_NOTE_LENGTH } from "../allowlist/entries.ts";
 import type { PublicConfig } from "../config/public.ts";
 import {
   REFERENCE_PATTERN,
@@ -6,6 +8,7 @@ import {
   type RecoveryEntry,
   type ResumeResult,
 } from "../reports/recovery.ts";
+import type { Config } from "../config/schema.ts";
 import { FIELD_ERRORS } from "../reports/validate.ts";
 import type { StatusView } from "../status/view.ts";
 import type { StaffDeviceCode, StaffDevicePoll, StaffMeta, StaffTokens } from "../staff/session.ts";
@@ -39,6 +42,15 @@ const attemptSelector = z
 const fieldErrors = Object.fromEntries(FIELD_ERRORS.map((code) => [code, 422])) as {
   [K in (typeof FIELD_ERRORS)[number]]: 422;
 };
+
+const allowlistEmail = z.string().max(254);
+const allowlistNote = z.string().trim().max(MAX_NOTE_LENGTH);
+
+/** What a configuration save changed in the repo's labels (SPEC 2.4: the save is the sync). */
+export interface LabelSync {
+  created: string[];
+  recoloured: string[];
+}
 
 /**
  * Every endpoint of the Worker. Add yours here; the Worker registers a handler for it and the SPA
@@ -213,6 +225,72 @@ export const endpoints = {
     response: type<StaffMeta>(),
     errors: {},
     role: "viewer",
+  }),
+
+  /** The Allowlist, newest first (SPEC 5). System admin only, like everything below. */
+  allowlistList: defineEndpoint({
+    method: "GET",
+    path: "/api/staff/allowlist",
+    request: z.object({}),
+    response: type<{ entries: AllowlistEntry[] }>(),
+    errors: {},
+    role: "admin",
+  }),
+  allowlistAdd: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/allowlist",
+    request: z.object({ email: allowlistEmail, note: allowlistNote.optional() }),
+    response: type<{ entry: AllowlistEntry }>(),
+    errors: { invalid_email: 422, already_listed: 409 },
+    role: "admin",
+  }),
+  /** Replaces the note of an entry; an empty note clears it. */
+  allowlistNote: defineEndpoint({
+    method: "PUT",
+    path: "/api/staff/allowlist",
+    request: z.object({ email: allowlistEmail, note: allowlistNote }),
+    response: type<{ entry: AllowlistEntry }>(),
+    errors: {},
+    role: "admin",
+  }),
+  allowlistRemove: defineEndpoint({
+    method: "DELETE",
+    path: "/api/staff/allowlist",
+    request: z.object({ email: allowlistEmail }),
+    response: type<{ removed: boolean }>(),
+    errors: {},
+    role: "admin",
+  }),
+  /** A pasted list, one address per line with an optional note; the answer reports each refused line. */
+  allowlistBulk: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/allowlist/bulk",
+    request: z.object({ text: z.string().max(200_000) }),
+    response: type<{ added: AllowlistEntry[]; errors: BulkLineError[] }>(),
+    errors: { too_many_entries: 422 },
+    role: "admin",
+  }),
+
+  /** The full configuration, or `null` while the Deployment is not configured yet (SPEC 2.4). */
+  configRead: defineEndpoint({
+    method: "GET",
+    path: "/api/staff/config",
+    request: z.object({}),
+    response: type<{ config: Config | null }>(),
+    errors: {},
+    role: "admin",
+  }),
+  /**
+   * Saves the whole configuration and syncs the repo's labels. The body is validated by the handler against
+   * `configSaveSchema`, so a refusal can name its fields (`invalid_config` carries them).
+   */
+  configSave: defineEndpoint({
+    method: "PUT",
+    path: "/api/staff/config",
+    request: z.object({ config: z.unknown() }),
+    response: type<{ config: Config; sync: LabelSync }>(),
+    errors: { invalid_config: 422 },
+    role: "admin",
   }),
 };
 

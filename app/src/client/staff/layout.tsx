@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertIcon } from "@primer/octicons-react";
-import { NavLink, Outlet, useNavigate } from "react-router";
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { roleAtLeast, type StaffRole } from "@shared/github/roles.ts";
 import { ApiError } from "@/api/call-api.ts";
 import { apiErrorMessage } from "@/api/error-message.ts";
-import { usePublicConfig } from "@/config/context.tsx";
+import { useConfigured, usePublicConfig } from "@/config/context.tsx";
 import { useT } from "@/i18n/context.tsx";
 import { useDocumentTitle } from "@/lib/document-title.ts";
 import { cn } from "@/lib/utils.ts";
@@ -88,6 +88,8 @@ export function Component() {
   const { displayName } = usePublicConfig();
   const tokens = useTokens();
   const meta = useQuery({ ...staffMetaQuery, enabled: tokens !== null });
+  const configured = useConfigured();
+  const { pathname } = useLocation();
   useDocumentTitle(t("staff.title"), displayName);
 
   if (tokens === null) return <SignIn />;
@@ -111,13 +113,32 @@ export function Component() {
   }
 
   const { role, login } = meta.data;
+  if (!configured) {
+    // A fresh Deployment (SPEC 2.4): a System admin is taken to the Configuration screen to set it up, and
+    // everyone else is told it is not configured.
+    if (role !== "admin") {
+      return (
+        <Message
+          title={t("staff.notConfigured.title")}
+          description={t("staff.notConfigured.description")}
+        >
+          <SignOutButton />
+        </Message>
+      );
+    }
+    if (pathname !== "/staff/configuration") return <Navigate to="/staff/configuration" replace />;
+  }
   return (
     <StaffProvider value={meta.data}>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b pb-3">
           <nav aria-label={t("staff.nav.label")}>
             <ul className="flex flex-wrap gap-1">
-              {NAV.filter((item) => roleAtLeast(role, item.minimum)).map((item) => (
+              {NAV.filter(
+                (item) =>
+                  roleAtLeast(role, item.minimum) &&
+                  (configured || item.to === "/staff/configuration"),
+              ).map((item) => (
                 <li key={item.to}>
                   <NavLink
                     to={item.to}

@@ -117,7 +117,7 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
         return fail("invalid_request");
       case "pending":
         return outcome.unresolved
-          ? fail("submission_unresolved", outcome.reference)
+          ? fail("submission_unresolved", { reference: outcome.reference })
           : fail("submission_pending");
       case "replay": {
         const token = await currentToken(env, outcome.receipt);

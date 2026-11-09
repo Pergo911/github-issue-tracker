@@ -27,7 +27,7 @@ export async function freePorts(count: number): Promise<number[]> {
   }
 }
 
-/** A private working area for one run: free ports for the two local servers, and state nobody else touches. */
+/** A private working area for one run: free ports for the three local servers, and state nobody else touches. */
 export interface Run {
   directory: string;
   /** What `playwright.config.ts` and the servers read: ports, run directory. */
@@ -36,18 +36,20 @@ export interface Run {
 }
 
 export async function prepareRun(): Promise<Run> {
-  const [seeded, empty, seededFakes, emptyFakes] = await freePorts(4);
+  const [seeded, empty, setup, seededFakes, emptyFakes, setupFakes] = await freePorts(6);
   const directory = join(APP_ROOT, ".tmp", `run-${process.pid}-${Date.now().toString(36)}`);
   mkdirSync(directory, { recursive: true });
-  // The seeded server's state holds the Appendix A configuration; the empty one starts with none.
+  // The seeded server's state holds the Appendix A configuration; the empty and setup ones start with none.
   await seedLocalConfig(join(directory, "state-seeded"));
   return {
     directory,
     env: {
       E2E_PORT_SEEDED: String(seeded),
       E2E_PORT_EMPTY: String(empty),
+      E2E_PORT_SETUP: String(setup),
       E2E_FAKES_PORT_SEEDED: String(seededFakes),
       E2E_FAKES_PORT_EMPTY: String(emptyFakes),
+      E2E_FAKES_PORT_SETUP: String(setupFakes),
       E2E_RUN_DIR: directory,
     },
     cleanup: () => {

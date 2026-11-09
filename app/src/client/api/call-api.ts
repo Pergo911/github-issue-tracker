@@ -13,12 +13,19 @@ export class ApiError extends Error {
   readonly status: number;
   /** A submission's reference, when the error carries one (`submission_unresolved`). */
   readonly reference: string | undefined;
-  constructor(code: ApiErrorCode, status: number, reference?: string) {
+  /** The fields a refused save names, when the answer carried them. */
+  readonly fields: { path: string; code: string }[];
+  constructor(
+    code: ApiErrorCode,
+    status: number,
+    detail: { reference?: string; fields?: { path: string; code: string }[] } = {},
+  ) {
     super(code);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
-    this.reference = reference;
+    this.reference = detail.reference;
+    this.fields = detail.fields ?? [];
   }
 }
 
@@ -85,7 +92,10 @@ export async function callApi<E extends AnyEndpoint>(
 
   const failure = apiErrorBodySchema.safeParse(body);
   if (failure.success && isApiErrorCode(failure.data.error.code)) {
-    throw new ApiError(failure.data.error.code, response.status, failure.data.error.reference);
+    throw new ApiError(failure.data.error.code, response.status, {
+      reference: failure.data.error.reference,
+      fields: failure.data.error.fields,
+    });
   }
   throw new ApiError("invalid_response", response.status);
 }
