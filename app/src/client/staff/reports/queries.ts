@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { GitHubIssue } from "@shared/github/types.ts";
+import type { GitHubIssue, GitHubTimelineEvent, GitHubUser } from "@shared/github/types.ts";
 import { staffSession } from "../auth/session.ts";
+import { GitHubHttpError } from "../github/session.ts";
 
 interface Repo {
   owner: string;
@@ -25,6 +26,36 @@ export const reportsQuery = (repo: Repo) =>
         ),
       ),
     refetchOnMount: "always",
+    retry: false,
+  });
+
+const repoPath = (repo: Repo) =>
+  `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}`;
+
+/** One Report and its whole timeline (every page), read fresh each time the Detail view opens. */
+export const reportDetailQuery = (repo: Repo, number: number) =>
+  queryOptions({
+    queryKey: ["staff", "report", repo.owner, repo.name, number],
+    queryFn: async () => {
+      const path = `${repoPath(repo)}/issues/${number}`;
+      const [issue, timeline] = await Promise.all([
+        staffSession.githubJson<GitHubIssue>(path),
+        staffSession.githubFetchAll<GitHubTimelineEvent>(`${path}/timeline`),
+      ]);
+      // The issues endpoints also answer for pull requests; a Report is never one.
+      if (issue.pull_request) throw new GitHubHttpError(404, "Not Found");
+      return { issue, timeline };
+    },
+    refetchOnMount: "always",
+    retry: false,
+  });
+
+/** The members an issue can be assigned to (the assignee picker's options). */
+export const assignableQuery = (repo: Repo) =>
+  queryOptions({
+    queryKey: ["staff", "assignable", repo.owner, repo.name],
+    queryFn: () => staffSession.githubFetchAll<GitHubUser>(`${repoPath(repo)}/assignees`),
+    staleTime: 60_000,
     retry: false,
   });
 

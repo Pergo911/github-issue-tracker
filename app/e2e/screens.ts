@@ -3,6 +3,7 @@ import { referenceConfig } from "../src/shared/seed/reference-config.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { urlFor, type ServerKind } from "./support/servers.ts";
 import { adminScreens } from "./admin-screens.ts";
+import { detailScreens } from "./detail-screens.ts";
 import { staffScreens } from "./staff-screens.ts";
 import { statusScreens } from "./status-screens.ts";
 
@@ -413,6 +414,8 @@ export const screens: Screen[] = [
   },
   // The Staff sign-in, device-code, no-access and List screens (ticket #27) are declared in staff-screens.ts.
   ...staffScreens,
+  // The Staff Detail view screens (ticket #28) are declared in detail-screens.ts.
+  ...detailScreens,
   // The Allowlist and Configuration screens (ticket #30) are declared in admin-screens.ts.
   ...adminScreens,
   // The Status page screens (ticket #25) are declared in status-screens.ts.

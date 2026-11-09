@@ -74,7 +74,7 @@ const CORS = {
 };
 
 /** Fulfils a request with JSON, answering a CORS preflight itself. */
-async function respond(route: Route, body: unknown): Promise<void> {
+export async function respond(route: Route, body: unknown): Promise<void> {
   if (route.request().method() === "OPTIONS") {
     await route.fulfill({ status: 204, headers: CORS });
     return;
