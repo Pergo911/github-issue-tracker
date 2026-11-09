@@ -10,7 +10,7 @@ import {
 /**
  * Do not run `playwright test` directly. `npm run test:e2e`, `npm run screenshots` and `npm run test:visual`
  * (scripts/*.ts) first pick free ports and a private state directory for the run and pass them in the
- * environment (E2E_PORT_SEEDED, E2E_PORT_EMPTY, E2E_RUN_DIR), so runs in sibling worktrees, or two runs in
+ * environment (E2E_PORT_SEEDED, E2E_PORT_EMPTY, E2E_PORT_SETUP, E2E_RUN_DIR), so runs in sibling worktrees, or two runs in
  * this one, never share a port or a state file.
  */
 const run = runDirectory();
@@ -71,6 +71,7 @@ export default defineConfig({
         "submission.spec.ts",
         "recovery.spec.ts",
         "staff.spec.ts",
+        "admin.spec.ts",
         "status.spec.ts",
         "sweep.spec.ts",
         "world.spec.ts",

@@ -14,7 +14,7 @@ const taxonomyNames = Object.values(referenceConfig.taxonomy)
   .flat()
   .map((value) => value.name)
   .sort((a, b) => b.length - a.length);
-const staffData: AllowedText[] = [
+export const staffData: AllowedText[] = [
   referenceConfig.displayName,
   ...taxonomyNames,
   /screen-[a-z]+/,

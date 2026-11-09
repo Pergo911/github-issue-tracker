@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { RouterProvider } from "react-router/dom";
+import { starterConfig } from "@shared/config/defaults.ts";
+import type { PublicConfig } from "@shared/config/public.ts";
 import { ApiError } from "@/api/call-api.ts";
 import { ConfigProvider } from "@/config/context.tsx";
 import { publicConfigQuery } from "@/config/queries.ts";
@@ -8,6 +10,21 @@ import { I18nProvider } from "@/i18n/context.tsx";
 import { selectCatalog } from "@/i18n/select-catalog.ts";
 import { FetchFailedScreen, LoadingScreen, NotConfiguredScreen } from "./boot-screens.tsx";
 import { router } from "./router.tsx";
+
+/**
+ * What the app runs on while the Deployment has no configuration (SPEC 2.4): only the Staff dashboard renders,
+ * so a System admin can reach the Configuration screen. English, no Organization name, the starter taxonomy.
+ */
+const unconfiguredPublicConfig = {
+  language: "en",
+  timezone: "UTC",
+  displayName: "",
+  emergencyNotice: "",
+  codeSentHelp: "",
+  taxonomy: starterConfig.taxonomy,
+} as unknown as PublicConfig;
+
+const onStaffPath = () => /^\/staff(\/|$)/.test(window.location.pathname);
 
 /**
  * The boot sequence (SPEC 2.5): the public configuration is requested before the first render
@@ -32,12 +49,18 @@ export function Boot() {
       </ConfigProvider>
     );
   } else if (query.isError) {
-    content =
-      query.error instanceof ApiError && query.error.code === "not_configured" ? (
-        <NotConfiguredScreen />
-      ) : (
-        <FetchFailedScreen onRetry={() => void query.refetch()} />
+    const notConfigured = query.error instanceof ApiError && query.error.code === "not_configured";
+    if (notConfigured && onStaffPath()) {
+      content = (
+        <ConfigProvider config={unconfiguredPublicConfig} configured={false}>
+          <RouterProvider router={router} />
+        </ConfigProvider>
       );
+    } else if (notConfigured) {
+      content = <NotConfiguredScreen />;
+    } else {
+      content = <FetchFailedScreen onRetry={() => void query.refetch()} />;
+    }
   } else {
     content = <LoadingScreen />;
   }

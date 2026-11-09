@@ -97,12 +97,14 @@ export function statusOf<E extends AnyEndpoint>(endpoint: E, code: WireErrorCode
   return own[code] ?? common[code] ?? 500;
 }
 
-/** The body of every error response: `{ "error": { "code": "..." } }`, with a `reference` only where stated. */
+/** The body of every error response: `{ "error": { "code": "..." } }`, with a `reference` or `fields` only where stated. */
 export const apiErrorBodySchema = z.object({
   error: z.object({
     code: z.string().min(1),
     /** A submission's reference, for the codes that hand a Reporter to a person (SPEC 4.1). */
     reference: z.string().min(1).max(40).optional(),
+    /** Which fields a refused save names (the configuration's `invalid_config`), as path and stable code. */
+    fields: z.array(z.object({ path: z.string(), code: z.string() })).optional(),
   }),
 });
 export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>;
