@@ -8,7 +8,11 @@ import { useT } from "@/i18n/context.tsx";
  */
 export function AppLayout() {
   const t = useT();
-  const { displayName } = usePublicConfig();
+  const { displayName: configuredName } = usePublicConfig();
+  // Empty only on a fresh Deployment, where just the Staff dashboard renders (SPEC 2.4): a neutral name then.
+  const unnamed = configuredName === "";
+  const displayName = unnamed ? t("home.heading") : configuredName;
+  const homeLabel = unnamed ? displayName : t("header.homeLink", { organization: displayName });
   return (
     <>
       <a
@@ -19,11 +23,7 @@ export function AppLayout() {
       </a>
       <header className="border-b bg-muted">
         <div className="mx-auto flex max-w-page items-center px-4 py-4 md:px-6">
-          <Link
-            to="/"
-            aria-label={t("header.homeLink", { organization: displayName })}
-            className="text-base font-semibold hover:text-link"
-          >
+          <Link to="/" aria-label={homeLabel} className="text-base font-semibold hover:text-link">
             {displayName}
           </Link>
         </div>

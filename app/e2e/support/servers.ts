@@ -2,12 +2,14 @@
  * The two local servers every end-to-end run starts, each with its own state (SPEC 2.6, ticket #21):
  *   seeded  the Appendix A configuration is in local KV, as on the reference Deployment
  *   empty   no `config` key: a fresh Deployment, which shows the "not configured" screen
+ *   setup   also empty at the start, and the one a journey may configure: the Configuration journeys (ticket #30)
+ *           save to it, so nothing else may rely on its state. Never read it from a declared screen.
  * `scripts/e2e.ts` (and `scripts/visual.ts`, `scripts/screenshots.ts`) pick free ports and a private state
  * directory per run and pass them in the environment, so runs in sibling worktrees never collide.
  */
-export type ServerKind = "seeded" | "empty";
+export type ServerKind = "seeded" | "empty" | "setup";
 
-export const SERVER_KINDS: readonly ServerKind[] = ["seeded", "empty"];
+export const SERVER_KINDS: readonly ServerKind[] = ["seeded", "empty", "setup"];
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name];
