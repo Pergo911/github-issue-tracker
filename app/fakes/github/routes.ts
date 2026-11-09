@@ -253,6 +253,13 @@ export class GitHubService {
       return jsonResponse(this.#renderer(c.url).user(account));
     });
 
+    // The authenticated App (a JWT): its slug is what the Bot's login `<slug>[bot]` is made of.
+    r.add("GET", "/app", async (c) => {
+      await this.#verifyAppJwt(c.request);
+      const { appId, slug } = this.#deps.bot;
+      return jsonResponse({ id: appId, slug, name: slug, node_id: `A_${appId}` });
+    });
+
     r.add("POST", "/app/installations/:id/access_tokens", async (c) => {
       await this.#verifyAppJwt(c.request);
       if (Number(c.params["id"]) !== this.#deps.bot.installationId) {

@@ -76,6 +76,9 @@ export default defineConfig([
       "@typescript-eslint/no-unsafe-call": "off",
       "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/unbound-method": "off",
+      // Stubs of async interfaces (fetch, poll) are async without awaiting.
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/no-base-to-string": "off",
     },
   },
 ]);
