@@ -44,6 +44,7 @@
   --link: var(--fgColor-accent);
   --accent-muted: var(--bgColor-accent-muted);
   --accent-emphasis: var(--borderColor-accent-emphasis);
+  /* Not `--border-muted`: Primer defines that name itself (a `1px solid` shorthand), and its theme would win. */
   --border-subtle: var(--borderColor-muted);
   --danger: var(--fgColor-danger);
   --danger-muted: var(--bgColor-danger-muted);
