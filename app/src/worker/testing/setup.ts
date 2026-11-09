@@ -25,6 +25,13 @@ beforeEach(async () => {
   await runInDurableObject(env.GLOBAL_GATE.getByName("deployment"), (_gate, state) =>
     state.storage.deleteAll(),
   );
+  // The fake GitHub numbers its issues from 1 in every test, but a Report gate's lifecycle outlives the test
+  // (production issue numbers are never reused): start each test with the numbers the tests use empty.
+  for (const number of [1, 2, 3, 102]) {
+    await runInDurableObject(env.REPORT_GATE.getByName(String(number)), (_gate, state) =>
+      state.storage.deleteAll(),
+    );
+  }
 });
 
 afterEach(async () => {

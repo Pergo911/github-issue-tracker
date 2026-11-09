@@ -6,24 +6,34 @@ import {
   type CommonErrorCode,
 } from "@shared/api/endpoints.ts";
 
+/** What an error answer may carry beyond its code: a submission's `reference`, or a refused save's `fields`. */
+export interface ErrorDetail {
+  reference?: string;
+  fields?: { path: string; code: string }[];
+}
+
 /** Failing from inside a handler: `fail("code")` throws this, and `registerEndpoint` answers with the code. */
 export class ApiFailure extends Error {
   readonly code: string;
+  readonly reference: string | undefined;
   readonly fields: { path: string; code: string }[] | undefined;
-  constructor(code: string, fields?: { path: string; code: string }[]) {
+  constructor(code: string, detail: ErrorDetail = {}) {
     super(code);
     this.code = code;
-    this.fields = fields;
+    this.reference = detail.reference;
+    this.fields = detail.fields;
   }
 }
 
 /** The error body every endpoint shares (`{ "error": { "code": "..." } }`), never carrying a message. */
-export function errorResponse(
-  code: string,
-  status: number,
-  fields?: { path: string; code: string }[],
-): Response {
-  const body: ApiErrorBody = { error: fields ? { code, fields } : { code } };
+export function errorResponse(code: string, status: number, detail: ErrorDetail = {}): Response {
+  const body: ApiErrorBody = {
+    error: {
+      code,
+      ...(detail.reference ? { reference: detail.reference } : {}),
+      ...(detail.fields ? { fields: detail.fields } : {}),
+    },
+  };
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
 }
 

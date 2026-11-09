@@ -20,7 +20,7 @@ export function registerConfig(app: Hono<{ Bindings: Env }>): void {
 
   registerEndpoint(app, endpoints.configSave, async ({ env, input, caller, fail }) => {
     const parsed = configSaveSchema.safeParse(input.config);
-    if (!parsed.success) return fail("invalid_config", fieldErrorsOf(parsed.error));
+    if (!parsed.success) return fail("invalid_config", { fields: fieldErrorsOf(parsed.error) });
 
     let sync;
     try {

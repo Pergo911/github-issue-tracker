@@ -1,51 +1,23 @@
 import type { Hono } from "hono";
 import { endpoints } from "@shared/api/endpoints.ts";
-import { labelName, type Config } from "@shared/config/schema.ts";
-import { renderEmail, type TemplateName } from "@shared/email/render.ts";
+import { labelName } from "@shared/config/schema.ts";
 import { catalogFor, createTranslator } from "@shared/i18n/index.ts";
 import type { GitHubIssue } from "@shared/github/types.ts";
 import { buildReportBody } from "@shared/reports/body.ts";
 import { normalizeEmail, validateFields } from "@shared/reports/validate.ts";
 import { registerEndpoint } from "../api/register.ts";
 import { loadConfig } from "../config/load.ts";
-import { OTP_TTL_MS } from "../gates/email-gate.ts";
+import { OTP_TTL_MS, type CompletionReceipt, type RecoverView } from "../gates/email-gate.ts";
+import { reach } from "../gates/probe.ts";
 import { createBotClient } from "../github/bot-client.ts";
-import { sendMail } from "../resend/send-mail.ts";
+import { injectedCreateFailures } from "../dev/local-world.ts";
 import { randomToken, sha256Hex } from "../util/crypto.ts";
+import { appBase, clientKey, sendTemplate } from "../util/request.ts";
 
 /**
  * The Submission form's two endpoints (SPEC 4.1): request a code, and verify the code and file the Report.
  * The Reporter's email goes to the gates, KV and Resend, and never into a GitHub write.
  */
-
-/** Per-IP limits key on the connecting address; the local world lets a test pick its own client. */
-function clientKey(env: Env, request: Request): string {
-  const local = env.LOCAL_WORLD ? request.headers.get("x-dev-client-ip") : null;
-  return local ?? request.headers.get("cf-connecting-ip") ?? "unknown";
-}
-
-/** The Status link's base: the Deployment's `APP_URL`, or in the local world the origin the SPA is served from. */
-function appBase(env: Env, request: Request): string {
-  const base = env.LOCAL_WORLD ? new URL(request.url).origin : env.APP_URL;
-  return base.replace(/\/+$/, "");
-}
-
-async function sendTemplate(
-  env: Env,
-  config: Config,
-  template: TemplateName,
-  to: string,
-  params: Record<string, string | number>,
-): Promise<void> {
-  const mail = renderEmail({ config, sendingDomain: env.RESEND_FROM_DOMAIN, template, to, params });
-  await sendMail(env, {
-    from: mail.from,
-    to: mail.to,
-    subject: mail.subject,
-    text: mail.text,
-    ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
-  });
-}
 
 /** Canonical JSON of the validated payload, in a fixed key order, hashed: replays must match it exactly. */
 function fingerprintOf(email: string, fields: Record<string, string | undefined>): Promise<string> {
@@ -59,6 +31,16 @@ function fingerprintOf(email: string, fields: Record<string, string | undefined>
       fields["place"] ?? null,
     ]),
   );
+}
+
+/**
+ * The receipt's Status token, only while it is still the Report's current one: a Reissue or an Erasure voids
+ * the receipt, so it never reveals a token that was replaced (SPEC 4.1).
+ */
+async function currentToken(env: Env, receipt: CompletionReceipt): Promise<string | null> {
+  const view = await env.REPORT_GATE.getByName(String(receipt.issueNumber)).view();
+  if (!view || view.state === "deleted" || view.generation !== receipt.generation) return null;
+  return receipt.statusToken;
 }
 
 export function registerReports(app: Hono<{ Bindings: Env }>): void {
@@ -134,18 +116,24 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
       case "conflict":
         return fail("invalid_request");
       case "pending":
-        return fail("submission_pending");
-      case "replay":
+        return outcome.unresolved
+          ? fail("submission_unresolved", { reference: outcome.reference })
+          : fail("submission_pending");
+      case "replay": {
+        const token = await currentToken(env, outcome.receipt);
+        if (token === null) return fail("not_found");
         return {
           number: outcome.receipt.issueNumber,
           title: outcome.receipt.title,
-          statusUrl: statusUrl(outcome.receipt.statusToken),
+          statusUrl: statusUrl(token),
         };
+      }
       case "verified":
         break;
     }
 
-    // Past the dispatch fence nothing here is ever repeated: a failure leaves the attempt pending for ticket #24.
+    // Past the dispatch fence the create is never repeated: a failure makes it uncertain, and recovery settles it
+    // by finding the marker (ADR 0005).
     let issueNumber: number;
     try {
       const t = createTranslator(catalogFor(config.language));
@@ -153,6 +141,10 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
       const location = config.taxonomy.location.find((value) => value.id === fields.location);
       const initial = config.taxonomy.status.find((status) => status.initial);
       const bot = createBotClient(env);
+      // The local world can fail one address's create before it reaches GitHub (end-to-end recovery journeys).
+      if (env.LOCAL_WORLD && injectedCreateFailures.delete(email)) {
+        throw new Error("an injected create failure (local world)");
+      }
       const created = await bot.request<GitHubIssue>("POST", bot.repoPath("/issues"), {
         body: {
           title: fields.title,
@@ -172,17 +164,23 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
         },
       });
       issueNumber = created.data.number;
-      await gate.recordIssue(credentialHash, issueNumber);
-      await env.REPORT_GATE.getByName(String(issueNumber)).writeMappings({
-        issueNumber,
-        email,
-        statusToken,
-      });
-      await gate.complete(credentialHash, Date.now());
+      reach("after-create");
     } catch (error) {
-      console.error("a verified submission is left pending", error);
+      console.error("the create is uncertain; recovery will look for its marker", error);
+      await gate.markUncertain(credentialHash).catch(() => undefined);
       return fail("submission_pending");
     }
+
+    // The issue number is persisted at once, then the Report gate registers and finalizes the mappings.
+    let finished: RecoverView;
+    try {
+      await gate.recordIssue(credentialHash, issueNumber);
+      finished = await gate.recover(Date.now());
+    } catch (error) {
+      console.error("a created Report is not finalized yet; recovery repairs it", error);
+      return fail("submission_pending");
+    }
+    if (finished.kind !== "complete") return fail("submission_pending");
 
     // Best effort: a failed confirmation is logged and never undoes completion.
     try {
@@ -195,5 +193,50 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
       console.error("the confirmation email could not be sent", error);
     }
     return { number: issueNumber, title: fields.title, statusUrl: statusUrl(statusToken) };
+  });
+
+  registerEndpoint(app, endpoints.resumeSubmission, async ({ env, input, request, fail }) => {
+    const config = await loadConfig(env.KV);
+    if (config === null) return fail("not_configured");
+    if (!(await env.RL_RESUME_IP.limit({ key: clientKey(env, request) })).success) {
+      return fail("rate_limited");
+    }
+
+    const email = normalizeEmail(input.email);
+    const credentialHash = await sha256Hex(`credential:${input.credential}`);
+    const gate = env.EMAIL_GATE.getByName(await sha256Hex(email));
+    // Only the attempt of this credential is read, and only it is advanced.
+    const view = await gate.resume(credentialHash, Date.now());
+    switch (view.kind) {
+      case "none":
+        return fail("not_found");
+      case "saving":
+        return { status: "saving" } as const;
+      case "needs_help":
+        return { status: "needs_help", reference: view.reference } as const;
+      case "complete": {
+        const token = await currentToken(env, view.receipt);
+        if (token === null) return fail("not_found");
+        const link = `${appBase(env, request)}/status/${token}`;
+        if (view.completedNow) {
+          // This pass finished the Report the first request could not: the Reporter still gets the email.
+          try {
+            await sendTemplate(env, config, "submissionConfirmation", email, {
+              number: view.receipt.issueNumber,
+              title: view.receipt.title,
+              link,
+            });
+          } catch (error) {
+            console.error("the confirmation email could not be sent", error);
+          }
+        }
+        return {
+          status: "complete",
+          number: view.receipt.issueNumber,
+          title: view.receipt.title,
+          statusUrl: link,
+        } as const;
+      }
+    }
   });
 }

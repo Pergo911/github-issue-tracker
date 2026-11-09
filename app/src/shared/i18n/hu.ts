@@ -174,6 +174,11 @@ export const hu = {
     "Ez a kód nem érvényes. Ellenőrizze, vagy kérjen újat. Öt hibás próbálkozás után a kód érvényét veszti.",
   "api.error.submission_pending":
     "A bejelentés mentése még folyamatban van. Ne küldje be újra: kérje meg a karbantartókat, hogy nézzék meg.",
+  "api.error.submission_unresolved":
+    "Egy korábbi bejelentés ettől a címtől emberi segítségre vár, mielőtt újat lehetne küldeni.",
+  "api.error.recovery_not_found": "Nincs ilyen azonosítójú vagy címhez tartozó mentett bejelentés.",
+  "api.error.issue_unverified":
+    "Ez a bejelentés nem kapcsolható hozzá: nem létezik, nem bejelentés, vagy már hozzá van kapcsolva.",
   "api.error.comment_length": "A megjegyzés 1 és 2000 karakter közötti lehet.",
   "api.error.reissue_mail_failed":
     "A hivatkozás megszűnt, de az új hivatkozást tartalmazó levelet nem sikerült elküldeni. Kérje az új hivatkozást a karbantartóktól.",
@@ -215,6 +220,18 @@ export const hu = {
   "form.changeAddress": "Másik cím használata",
   "form.submit": "Bejelentés beküldése",
   "form.submitting": "A bejelentés beküldése…",
+  "saving.title": "A bejelentés mentése még folyamatban van",
+  "saving.description":
+    "A bejelentését megkaptuk, a mentése folyamatban van. Ez eltarthat egy ideig, az oldal magától frissül.",
+  "saving.refresh":
+    "Az oldalt nyugodtan frissítheti, ott folytatja, ahol abbahagyta. Ne küldje be újra a bejelentést.",
+  "help.title": "A bejelentés befejezéséhez ember segítsége kell",
+  "help.description":
+    "Nem tudtuk megerősíteni, hogy a bejelentése elmentődött. Biztonságosan megőrizzük.",
+  "help.reference": "Az Ön azonosítója",
+  "help.contact": "Ezt az azonosítót adja meg nekik",
+  "help.noResend":
+    "Ne küldje be újra a bejelentést, mert kétszer jöhetne létre. A fent megadott személyek befejezik vagy lemondják.",
   "confirmation.title": "A bejelentését megkaptuk",
   "confirmation.number": "Bejelentés sorszáma",
   "confirmation.reportTitle": "Cím",

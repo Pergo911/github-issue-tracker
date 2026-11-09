@@ -177,6 +177,11 @@ export const en = {
     "That code is not valid. Check it, or ask for a new one. A code stops working after five wrong tries.",
   "api.error.submission_pending":
     "Your report is still being saved. Do not submit it again: ask the maintenance staff to check it.",
+  "api.error.submission_unresolved":
+    "An earlier report from this address needs help from a person before another can be sent.",
+  "api.error.recovery_not_found": "No saved report matches that reference or address.",
+  "api.error.issue_unverified":
+    "That issue cannot be linked: it is missing, not a report, or already linked.",
   "api.error.comment_length": "A comment must be 1 to 2,000 characters.",
   "api.error.reissue_mail_failed":
     "The link was replaced, but the email with the new one could not be sent. Ask the maintenance staff for the new link.",
@@ -219,6 +224,17 @@ export const en = {
   "form.changeAddress": "Use a different address",
   "form.submit": "Submit report",
   "form.submitting": "Submitting the report…",
+  "saving.title": "Still saving your report",
+  "saving.description":
+    "Your report was received and is being saved. This can take a moment, and this page updates by itself.",
+  "saving.refresh":
+    "You can refresh the page and it will pick up where it left off. Do not send the report again.",
+  "help.title": "Your report needs a person to finish it",
+  "help.description": "We could not confirm that your report was saved. It is kept safely.",
+  "help.reference": "Your reference",
+  "help.contact": "Give the reference to them",
+  "help.noResend":
+    "Do not send the report again: that could create it twice. The people above will complete or cancel it.",
   "confirmation.title": "Your report was received",
   "confirmation.number": "Report number",
   "confirmation.reportTitle": "Title",

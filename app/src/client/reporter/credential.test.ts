@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { CREDENTIAL_PATTERN } from "@shared/api/endpoints.ts";
-import { attemptCredential, CREDENTIAL_STORAGE_KEY, forgetCredential } from "./credential.ts";
+import {
+  attemptCredential,
+  CREDENTIAL_STORAGE_KEY,
+  forgetCredential,
+  PENDING_STORAGE_KEY,
+  pendingSubmission,
+  rememberPending,
+} from "./credential.ts";
 
 function memoryStorage() {
   const data = new Map<string, string>();
@@ -37,5 +44,27 @@ describe("the attempt credential", () => {
     const broken = { getItem: blocked, setItem: blocked, removeItem: blocked };
     expect(attemptCredential(broken)).toMatch(CREDENTIAL_PATTERN);
     expect(() => forgetCredential(broken)).not.toThrow();
+  });
+});
+
+describe("the pending submission marker", () => {
+  it("remembers the address of a dispatched submission for the tab, and forgets it with the credential", () => {
+    const storage = memoryStorage();
+    expect(pendingSubmission(storage)).toBeNull();
+    const credential = attemptCredential(storage);
+    rememberPending("anna@example.hu", storage);
+    expect(pendingSubmission(storage)).toEqual({ email: "anna@example.hu", credential });
+    forgetCredential(storage);
+    expect(pendingSubmission(storage)).toBeNull();
+  });
+
+  it("is not a pending submission without a credential, or when the marker is unreadable", () => {
+    const storage = memoryStorage();
+    storage.data.set(PENDING_STORAGE_KEY, JSON.stringify({ email: "anna@example.hu" }));
+    expect(pendingSubmission(storage)).toBeNull();
+    attemptCredential(storage);
+    storage.data.set(PENDING_STORAGE_KEY, "{not json");
+    expect(pendingSubmission(storage)).toBeNull();
+    expect(pendingSubmission(null)).toBeNull();
   });
 });
