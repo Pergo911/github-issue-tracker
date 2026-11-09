@@ -164,6 +164,17 @@ export const en = {
   "form.changeAddress": "Use a different address",
   "form.submit": "Submit report",
   "form.submitting": "Submitting the report…",
+  "saving.title": "Still saving your report",
+  "saving.description":
+    "Your report was received and is being saved. This can take a moment, and this page updates by itself.",
+  "saving.refresh":
+    "You can refresh the page and it will pick up where it left off. Do not send the report again.",
+  "help.title": "Your report needs a person to finish it",
+  "help.description": "We could not confirm that your report was saved. It is kept safely.",
+  "help.reference": "Your reference",
+  "help.contact": "Give the reference to them",
+  "help.noResend":
+    "Do not send the report again: that could create it twice. The people above will complete or cancel it.",
   "confirmation.title": "Your report was received",
   "confirmation.number": "Report number",
   "confirmation.reportTitle": "Title",
