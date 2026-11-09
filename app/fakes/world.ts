@@ -369,6 +369,11 @@ export function createWorld(options: WorldOptions): World {
       return { staff, reports };
     },
     createReport,
+    addComment(number, body, authorLogin) {
+      const author = authorLogin ? store.accountByLogin(authorLogin) : store.botAccount;
+      if (!author) throw new Error(`Unknown comment author ${authorLogin}`);
+      return { id: store.createComment(author, number, body).id };
+    },
     deleteReport(number) {
       const snapshot = store.snapshotIssue(number);
       const event = store.deleteIssue(store.botAccount, number);

@@ -74,6 +74,7 @@ export default defineConfig({
         "admin.spec.ts",
         "status.spec.ts",
         "webhook.spec.ts",
+        "board.spec.ts",
         "sweep.spec.ts",
         "world.spec.ts",
       ],
