@@ -70,6 +70,7 @@ export default defineConfig({
         "screens.spec.ts",
         "submission.spec.ts",
         "staff.spec.ts",
+        "status.spec.ts",
         "sweep.spec.ts",
         "world.spec.ts",
       ],
