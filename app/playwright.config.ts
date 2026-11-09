@@ -69,6 +69,7 @@ export default defineConfig({
         "boot.spec.ts",
         "screens.spec.ts",
         "submission.spec.ts",
+        "recovery.spec.ts",
         "staff.spec.ts",
         "sweep.spec.ts",
         "world.spec.ts",

@@ -681,7 +681,8 @@ sense some readers assume that word means.
   discarded. Show a reference and the configured contact instructions when human help is needed, not a blind
   resubmit button. A System admin's operational procedure inspects the retained attempt and GitHub marker,
   associates a verified existing issue or explicitly discards/cancels the attempt and its partial mappings.
-  The procedure's tooling is an implementation choice, not a new dashboard screen or a new planning ticket.
+  The procedure's tooling is an implementation choice, not a new dashboard screen or a new planning ticket (built as an
+  Admin-gated Worker endpoint and a CLI: [runbook](./docs/runbook-submission-recovery.md)).
 - The Report gate coordinates finalization, Reissue and Erasure with persisted lifecycle state, including a
   deletion tombstone. Register known-issue recovery there before KV finalization. Delayed work cannot recreate
   a deleted Report's mappings or overwrite a replacement token. Recovery rechecks issue existence and current
