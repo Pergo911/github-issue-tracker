@@ -12,7 +12,8 @@ import { sendMail } from "../resend/send-mail.ts";
  * Smoke routes that exist only in the local world (`vite dev` sets `LOCAL_WORLD`, ticket #22): they prove
  * from a running dev server that the Worker reaches the fake GitHub as the Bot, resolves a Staff token to a
  * role, and sends mail through the fake Resend. A deployed Worker has no `LOCAL_WORLD`, so they answer 404.
- * They are not part of the API contract the SPA uses.
+ * They are not part of the API contract the SPA uses. Per-IP limits key on the `x-dev-client-ip` header here, so
+ * parallel tests do not share one address.
  */
 const smoke = defineEndpoint({
   method: "POST",
@@ -25,6 +26,14 @@ const smoke = defineEndpoint({
     authorType: string;
     mailId: string;
   }>(),
+  errors: {},
+});
+
+const allowlist = defineEndpoint({
+  method: "POST",
+  path: "/api/_dev/allowlist",
+  request: z.object({ email: z.string().min(3) }),
+  response: type<{ key: string }>(),
   errors: {},
 });
 
@@ -70,6 +79,16 @@ export function registerLocalWorld(app: Hono<{ Bindings: Env }>): void {
       authorType: read.data.user.type,
       mailId: mail.id,
     };
+  });
+
+  // Stands in for the Allowlist screen (ticket #28) so end-to-end tests can put an address on the list.
+  registerEndpoint(app, allowlist, async ({ env, input }) => {
+    const key = `allowlist:${input.email.trim().toLowerCase()}`;
+    await env.KV.put(
+      key,
+      JSON.stringify({ addedBy: "local-world", addedAt: new Date().toISOString() }),
+    );
+    return { key };
   });
 
   registerEndpoint(app, whoami, ({ caller }) => ({ role: caller.role, login: caller.login }));

@@ -1,3 +1,4 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, expect, vi } from "vitest";
 import { TEST_ORIGIN } from "@fakes/testing/constants.ts";
@@ -18,8 +19,12 @@ beforeAll(() => {
   });
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   fakeWorld().control.reset();
+  // The Deployment-wide code budget is one object for the whole file: every test starts with a full day.
+  await runInDurableObject(env.GLOBAL_GATE.getByName("deployment"), (_gate, state) =>
+    state.storage.deleteAll(),
+  );
 });
 
 afterEach(async () => {

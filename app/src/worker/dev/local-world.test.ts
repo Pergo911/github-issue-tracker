@@ -21,6 +21,22 @@ describe("the local world's smoke routes", () => {
     expect((await call("/api/_dev/whoami", {}, env)).status).toBe(404);
   });
 
+  it("put an address on the Allowlist, the way the Worker keeps it", async () => {
+    const response = await call("/api/_dev/allowlist", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: " Dev.Listed@Example.HU " }),
+    });
+    expect(response.status).toBe(200);
+    expect(await env.KV.get("allowlist:dev.listed@example.hu", "json")).toMatchObject({
+      addedBy: "local-world",
+    });
+    await env.KV.delete("allowlist:dev.listed@example.hu");
+    expect((await call("/api/_dev/allowlist", { method: "POST", body: "{}" }, env)).status).toBe(
+      404,
+    );
+  });
+
   it("have the Bot create an issue and read it back, and send a test email", async () => {
     const response = await call("/api/_dev/smoke", {
       method: "POST",

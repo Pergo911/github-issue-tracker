@@ -22,6 +22,8 @@ export interface HandlerContext<E extends AnyEndpoint> {
   input: ParsedRequestOf<E>;
   env: Env;
   request: Request;
+  /** Runs work after the response is sent (`ctx.waitUntil`): its failure never reaches the caller. */
+  waitUntil: (work: Promise<unknown>) => void;
   /** Ends the request with one of this endpoint's error codes (or a common one). */
   fail: (code: WireErrorCodeOf<E>) => never;
 }
@@ -59,6 +61,16 @@ export function registerEndpoint<E extends AnyEndpoint>(
         input: input as ParsedRequestOf<E>,
         env: c.env,
         request: c.req.raw,
+        waitUntil: (work) => {
+          const guarded = work.catch((error: unknown) => {
+            console.error("deferred work failed in", endpoint.path, error);
+          });
+          try {
+            c.executionCtx.waitUntil(guarded);
+          } catch {
+            // No execution context (a bare Hono test): the work simply runs on its own.
+          }
+        },
         fail: (code) => {
           throw new ApiFailure(code);
         },

@@ -113,7 +113,15 @@ fakes keep their state in memory: a dev-server restart is a reset.
   Staff member in), `addFault '<json>'`, `reset`. Every method of the `Control` interface in `fakes/control.ts` works;
   `GET <world url>/control/summary` works in a browser. `npm run world` finds the world through
   `<PERSIST_DIR>/world.json` (or `WORLD_URL`). The Worker's smoke routes `POST /api/_dev/smoke` and
-  `GET /api/_dev/whoami` exist only there (`LOCAL_WORLD`), as the demo.
+  `GET /api/_dev/whoami` exist only there (`LOCAL_WORLD`), as the demo. So does `POST /api/_dev/allowlist`
+  (`{email}`), which puts an address on the Allowlist until the Allowlist screen exists. In the local world the
+  per-IP limits key on an `x-dev-client-ip` request header when present, so parallel end-to-end tests give
+  each journey its own address (`e2e/submission.spec.ts`). Screens that would spend the real code budget or
+  the per-IP limit fake `/api/reports/*` with `page.route` instead (`e2e/screens.ts`).
+- **Worker tests and the gates.** A Durable Object's storage persists across the tests of one file: give each
+  test its own email (its Email gate keeps the 60 s cooldown), and note `setup.ts` empties the Global gate
+  before every test. Hold the fake GitHub's webhooks (`holdWebhooks`) in a test that uses the `lost-response`
+  fault, or the shared teardown waits for a delivery that never answers.
 - **What the fakes model.** Issues, labels, comments, the timeline, search, the repo `permissions` per token, App JWT
   checking, installation tokens, device flow (every outcome scriptable), signed `issues` webhooks with switches for
   duplicate and out-of-order delivery, CORS, and faults (timeout, 5xx, "created, but the response was lost"). The

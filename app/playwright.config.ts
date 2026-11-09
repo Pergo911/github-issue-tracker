@@ -65,7 +65,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: ["boot.spec.ts", "screens.spec.ts", "sweep.spec.ts", "world.spec.ts"],
+      testMatch: [
+        "boot.spec.ts",
+        "screens.spec.ts",
+        "submission.spec.ts",
+        "sweep.spec.ts",
+        "world.spec.ts",
+      ],
       use: { ...devices["Desktop Chrome"] },
     },
     {
