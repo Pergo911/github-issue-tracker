@@ -4,6 +4,7 @@ import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { urlFor, type ServerKind } from "./support/servers.ts";
 import { adminScreens } from "./admin-screens.ts";
 import { staffScreens } from "./staff-screens.ts";
+import { statusScreens } from "./status-screens.ts";
 
 /**
  * THE declared list of screens and states. Every ticket that adds or changes a screen adds or edits its
@@ -294,6 +295,8 @@ export const screens: Screen[] = [
   ...staffScreens,
   // The Allowlist and Configuration screens (ticket #30) are declared in admin-screens.ts.
   ...adminScreens,
+  // The Status page screens (ticket #25) are declared in status-screens.ts.
+  ...statusScreens,
   {
     id: "not-found",
     description: "An address no route claims.",
