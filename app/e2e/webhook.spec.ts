@@ -51,6 +51,8 @@ async function fileReport(request: APIRequestContext, world: AsyncControl): Prom
     },
   });
   expect(filed.ok()).toBe(true);
+  // The Reporter's mail so far: the code, then the confirmation with the Status link
+  await waitForMail(world, email, 2);
   const body = (await filed.json()) as { number: number; statusUrl: string };
   return { number: body.number, token: body.statusUrl.split("/").at(-1) as string, email };
 }
@@ -93,18 +95,18 @@ test.describe("the webhook receiver", () => {
     await patch(`/issues/${number}`, { assignees: ["hook-staff-1"] });
     // A notify Status, a close (the dashboard's: the Status label goes with it), a reopen with the initial Status
     await patch(`/issues/${number}`, { labels: [category, "status:in-progress"] });
-    await waitForMail(world, email, 2);
+    await waitForMail(world, email, 3);
     await patch(`/issues/${number}`, {
       state: "closed",
       state_reason: "not_planned",
       labels: [category],
     });
-    await waitForMail(world, email, 3);
-    await patch(`/issues/${number}`, { state: "open", labels: [category, "status:new"] });
     await waitForMail(world, email, 4);
+    await patch(`/issues/${number}`, { state: "open", labels: [category, "status:new"] });
+    await waitForMail(world, email, 5);
     await world.flushWebhooks();
 
-    const mails = (await world.outbox(email)).slice(1);
+    const mails = (await world.outbox(email)).slice(2);
     expect(mails).toHaveLength(3);
     const base = `Bejelentés #${number} — „Elakadt a nagy lift” — `;
     expect(mails.map((mail) => mail.subject)).toEqual([
@@ -123,18 +125,42 @@ test.describe("the webhook receiver", () => {
     for (const mail of mails) console.log(`--- ${mail.subject}\n${mail.text}\n`);
   });
 
+  test("the dashboard's close-as-fixed and reopen each send exactly one email", async ({
+    request,
+    world,
+  }) => {
+    const { number, email } = await fileReport(request, world);
+    const patch = await asStaff(request, world, "hook-staff-3");
+    const category = "category:elevator";
+    // The Detail view's writes (#28): one PATCH each, the Status label dropped on close, the Initial status on reopen
+    await patch(`/issues/${number}`, {
+      state: "closed",
+      state_reason: "completed",
+      labels: [category],
+    });
+    await waitForMail(world, email, 3);
+    await patch(`/issues/${number}`, { state: "open", labels: [category, "status:new"] });
+    await waitForMail(world, email, 4);
+    await world.flushWebhooks();
+    const mails = (await world.outbox(email)).slice(2);
+    expect(mails.map((mail) => mail.subject.split(" — ").at(-1))).toEqual([
+      "lezárva",
+      "újranyitva",
+    ]);
+  });
+
   test("a redelivered delivery does not send twice", async ({ request, world }) => {
     const { number, email } = await fileReport(request, world);
     const patch = await asStaff(request, world, "hook-staff-2");
     await patch(`/issues/${number}`, { state: "closed" });
-    await waitForMail(world, email, 2);
+    await waitForMail(world, email, 3);
     const closed = (await world.webhookDeliveries()).find(
       (delivery) => delivery.issueNumber === number && delivery.action === "closed",
     );
     expect(closed).toBeDefined();
     await world.redeliverWebhook(closed?.id as string);
     await world.flushWebhooks();
-    expect(await world.outbox(email)).toHaveLength(2);
+    expect(await world.outbox(email)).toHaveLength(3);
   });
 
   test("deleting the issue on GitHub erases the Report: the Status link answers 404", async ({
@@ -147,6 +173,6 @@ test.describe("the webhook receiver", () => {
     await world.flushWebhooks();
     expect((await lookup(request, token)).status()).toBe(404);
     // Nothing is mailed to the Reporter for the deletion
-    expect(await world.outbox(email)).toHaveLength(1);
+    expect(await world.outbox(email)).toHaveLength(2);
   });
 });
