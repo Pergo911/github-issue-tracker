@@ -7,6 +7,7 @@ import {
   type ResumeResult,
 } from "../reports/recovery.ts";
 import { FIELD_ERRORS } from "../reports/validate.ts";
+import type { StatusView } from "../status/view.ts";
 import type { StaffDeviceCode, StaffDevicePoll, StaffMeta, StaffTokens } from "../staff/session.ts";
 import {
   CLIENT_ERROR_CODES,
@@ -108,6 +109,39 @@ export const endpoints = {
     }),
     response: type<ResumeResult>(),
     errors: { not_configured: 404 },
+  }),
+
+  /**
+   * The Status page's read (SPEC 4.3): the public projection of the Report a Status link names. A token that is
+   * unknown, malformed or replaced is the same generic `not_found`. The token travels in the body, not the path.
+   */
+  statusLookup: defineEndpoint({
+    method: "POST",
+    path: "/api/status/lookup",
+    request: z.object({ token: z.string().max(200) }),
+    response: type<StatusView>(),
+    errors: { not_configured: 404 },
+  }),
+
+  /** A Reporter comment from the Status page (SPEC 4.3): 1-2,000 characters after trimming. */
+  statusComment: defineEndpoint({
+    method: "POST",
+    path: "/api/status/comment",
+    request: z.object({ token: z.string().max(200), text: z.string().max(20_000) }),
+    response: type<{ accepted: true }>(),
+    errors: { comment_length: 422, not_configured: 404 },
+  }),
+
+  /**
+   * Ends this Status link for everyone and emails a new one to the Reporter (SPEC 4.3). The new link is never in
+   * the answer. `reissue_mail_failed`: the link was replaced but the email could not be sent.
+   */
+  statusReissue: defineEndpoint({
+    method: "POST",
+    path: "/api/status/reissue",
+    request: z.object({ token: z.string().max(200) }),
+    response: type<{ sent: true }>(),
+    errors: { reissue_mail_failed: 502, not_configured: 404 },
   }),
 
   /** Starts GitHub's device flow for the Staff app (SPEC 2.2): a proxy, so no `client_secret` exists anywhere. */
