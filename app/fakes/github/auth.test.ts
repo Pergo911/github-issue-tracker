@@ -239,3 +239,15 @@ describe("authentic identities", () => {
     expect(a.json.id).not.toBe(b.json.id);
   });
 });
+
+describe("GET /app", () => {
+  it("answers the authenticated App's identity to a valid JWT, and 401 to anything else", async () => {
+    const { client, keys, bot } = await createTestWorld();
+    const jwt = await signTestJwt(keys.privateKeyPkcs8, { iss: String(bot.appId) });
+    const reply = await client.github("GET", "/app", { token: jwt });
+    expect(reply.status).toBe(200);
+    expect(reply.json).toMatchObject({ id: bot.appId, slug: bot.slug });
+    expect((await client.github("GET", "/app")).status).toBe(401);
+    expect((await client.github("GET", "/app", { token: "ghu_nope" })).status).toBe(401);
+  });
+});

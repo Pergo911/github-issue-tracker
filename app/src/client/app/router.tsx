@@ -1,4 +1,4 @@
-import { createBrowserRouter, useRouteError } from "react-router";
+import { createBrowserRouter, redirect, useRouteError } from "react-router";
 import { FetchFailedScreen, LoadingScreen } from "./boot-screens.tsx";
 import { AppLayout } from "./layout.tsx";
 import { Home } from "./home.tsx";
@@ -23,7 +23,18 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: Home },
       { path: "report", lazy: () => import("../reporter/submission-form.tsx") },
-      { path: "staff/*", lazy: () => import("../staff/sign-in-placeholder.tsx") },
+      {
+        // Everything under /staff is the `staff/` chunk, loaded only when a member goes there (SPEC 2.6).
+        path: "staff",
+        lazy: () => import("../staff/layout.tsx"),
+        children: [
+          { index: true, loader: () => redirect("/staff/reports") },
+          { path: "reports", lazy: () => import("../staff/reports/list-page.tsx") },
+          { path: "allowlist", lazy: () => import("../staff/allowlist-placeholder.tsx") },
+          { path: "configuration", lazy: () => import("../staff/configuration-placeholder.tsx") },
+          { path: "*", Component: NotFound },
+        ],
+      },
       { path: "*", Component: NotFound },
     ],
   },

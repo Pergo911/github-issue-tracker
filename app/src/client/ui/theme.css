@@ -44,7 +44,8 @@
   --link: var(--fgColor-accent);
   --accent-muted: var(--bgColor-accent-muted);
   --accent-emphasis: var(--borderColor-accent-emphasis);
-  --border-muted: var(--borderColor-muted);
+  /* Not `--border-muted`: Primer defines that name itself (a `1px solid` shorthand), and its theme would win. */
+  --border-subtle: var(--borderColor-muted);
   --danger: var(--fgColor-danger);
   --danger-muted: var(--bgColor-danger-muted);
   --attention: var(--fgColor-attention);
@@ -86,7 +87,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
-  --color-border-muted: var(--border-muted);
+  --color-border-subtle: var(--border-subtle);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-link: var(--link);
@@ -148,5 +149,60 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: -2px;
+  }
+}
+
+/*
+ * Label pills from one hex colour: GitHub's own formula (docs/ui-github-look.md). `labelColorVars` sets
+ * --label-r/g/b (0 to 255), --label-h (degrees) and --label-s/--label-l (plain 0 to 100 numbers) inline.
+ */
+.label-pill {
+  --perceived-lightness: calc(
+    (var(--label-r) * 0.2126 + var(--label-g) * 0.7152 + var(--label-b) * 0.0722) / 255
+  );
+  --lightness-switch: max(
+    0,
+    min(calc(1 / (var(--lightness-threshold) - var(--perceived-lightness))), 1)
+  );
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 2em;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+
+  /* light mode */
+  --lightness-threshold: 0.453;
+  --border-threshold: 0.96;
+  --border-alpha: max(
+    0,
+    min(calc((var(--perceived-lightness) - var(--border-threshold)) * 100), 1)
+  );
+  background: rgb(var(--label-r), var(--label-g), var(--label-b));
+  color: hsl(0deg, 0%, calc(var(--lightness-switch) * 100%));
+  border-color: hsl(
+    var(--label-h) calc(var(--label-s) * 1%) calc((var(--label-l) - 25) * 1%) / var(--border-alpha)
+  );
+}
+
+@media (prefers-color-scheme: dark) {
+  .label-pill {
+    --lightness-threshold: 0.6;
+    --background-alpha: 0.18;
+    --border-alpha: 0.3;
+    --lighten-by: calc(
+      (var(--lightness-threshold) - var(--perceived-lightness)) * 100 * var(--lightness-switch)
+    );
+    background: rgb(var(--label-r) var(--label-g) var(--label-b) / var(--background-alpha));
+    color: hsl(
+      var(--label-h) calc(var(--label-s) * 1%) calc((var(--label-l) + var(--lighten-by)) * 1%)
+    );
+    border-color: hsl(
+      var(--label-h) calc(var(--label-s) * 1%) calc((var(--label-l) + var(--lighten-by)) * 1%) /
+        var(--border-alpha)
+    );
   }
 }
