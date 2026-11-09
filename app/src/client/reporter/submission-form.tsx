@@ -14,7 +14,33 @@ import { Button } from "@/ui/button.tsx";
 import { Field, describedBy } from "@/ui/field.tsx";
 import { Input, Select, Textarea } from "@/ui/input.tsx";
 import { Confirmation, type FiledReport } from "./confirmation.tsx";
-import { attemptCredential, forgetCredential } from "./credential.ts";
+import {
+  attemptCredential,
+  clearPending,
+  forgetCredential,
+  pendingSubmission,
+  rememberPending,
+} from "./credential.ts";
+import { NeedsHelp, StillSaving } from "./recovery-states.tsx";
+
+/** How often the tab asks a still-saving submission how it stands, and one that needs a person. */
+// The resume endpoint allows 10 a minute per address (SPEC 4.5): never ask faster than that.
+const SAVING_POLL_MS = 7_000;
+const HELP_POLL_MS = 30_000;
+
+/** What the final submit's outcome left the tab showing instead of the form (SPEC 4.1, ADR 0005). */
+type Recovery =
+  | { kind: "saving" }
+  /** `resumable`: the credential in this tab belongs to the attempt that needs help. */
+  | { kind: "help"; reference: string; resumable: boolean };
+
+/** The outcomes whose result the Reporter never learned: the marker stays, so a refresh can resume. */
+const UNKNOWN_OUTCOME: readonly ApiErrorCode[] = [
+  "network_error",
+  "invalid_response",
+  "internal_error",
+  "upstream_unavailable",
+];
 
 /** The resend countdown the client runs itself: the server's cooldown is silent (SPEC 4.1, 4.5). */
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -86,7 +112,14 @@ export function Component() {
   const [codeSent, setCodeSent] = useState(false);
   const [resendAt, setResendAt] = useState<number | null>(null);
   const [filed, setFiled] = useState<FiledReport | null>(null);
+  // A submission this tab dispatched and never heard the end of: resume it (also after a refresh).
+  const [recovery, setRecovery] = useState<Recovery | null>(() =>
+    pendingSubmission() ? { kind: "saving" } : null,
+  );
   const formRef = useRef<HTMLFormElement>(null);
+  const dispatched = useRef<{ email: string; credential: string } | null>(null);
+  // What the dispatch failed with when its outcome was unknown, shown if the server turns out never to have seen it.
+  const dispatchFailure = useRef<unknown>(null);
   const focusInvalid = useRef(0);
   const [now, refreshNow] = useNow(resendAt !== null);
   const secondsLeft = resendAt === null ? 0 : Math.max(0, Math.ceil((resendAt - now) / 1000));
@@ -96,7 +129,61 @@ export function Component() {
     locations: config.taxonomy.location.map((value) => value.id),
   };
 
-  useDocumentTitle(filed ? t("confirmation.title") : t("form.heading"), config.displayName);
+  useDocumentTitle(
+    filed
+      ? t("confirmation.title")
+      : recovery?.kind === "saving"
+        ? t("saving.title")
+        : recovery?.kind === "help"
+          ? t("help.title")
+          : t("form.heading"),
+    config.displayName,
+  );
+
+  // While the submission is saving, or needs a person, ask how it stands: complete shows the confirmation page.
+  const resumable = recovery !== null && (recovery.kind === "saving" || recovery.resumable);
+  const recoveryKind = recovery?.kind;
+  useEffect(() => {
+    if (!resumable) return undefined;
+    // The stored marker survives a refresh; the ref covers a tab whose storage is blocked.
+    const pending = pendingSubmission() ?? dispatched.current;
+    if (!pending) return undefined;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function poll(current: { email: string; credential: string }) {
+      let next = recoveryKind === "help" ? HELP_POLL_MS : SAVING_POLL_MS;
+      try {
+        const result = await callApi(endpoints.resumeSubmission, current);
+        if (cancelled) return;
+        if (result.status === "complete") {
+          forgetCredential();
+          setRecovery(null);
+          setFiled({ number: result.number, title: result.title, statusUrl: result.statusUrl });
+          return;
+        }
+        if (result.status === "needs_help") {
+          setRecovery({ kind: "help", reference: result.reference, resumable: true });
+          next = HELP_POLL_MS;
+        }
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof ApiError && error.code === "not_found") {
+          // The server holds nothing for this credential (never reached, spent, or its link replaced).
+          forgetCredential();
+          setRecovery(null);
+          setFailure(dispatchFailure.current ?? error);
+          return;
+        }
+        next = Math.max(next, 15_000);
+      }
+      timer = setTimeout(() => void poll(current), next);
+    }
+    void poll(pending);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [resumable, recoveryKind]);
 
   // After a failed check, move focus to the first control that reports a problem.
   useEffect(() => {
@@ -141,11 +228,17 @@ export function Component() {
   async function submit() {
     setBusy("submit");
     setFailure(null);
+    const email = normalizeEmail(values.email);
+    const credential = attemptCredential();
+    // Before the dispatch: if the answer is lost, a refresh of this tab resumes the same attempt.
+    rememberPending(email);
+    dispatched.current = { email, credential };
+    dispatchFailure.current = null;
     try {
       const report = await callApi(endpoints.submitReport, {
-        email: normalizeEmail(values.email),
+        email,
         code: values.code.trim(),
-        credential: attemptCredential(),
+        credential,
         category: values.category,
         location: values.location,
         title: values.title,
@@ -155,12 +248,27 @@ export function Component() {
       forgetCredential();
       setFiled(report);
     } catch (error) {
-      if (error instanceof ApiError && isFieldError(error.code)) {
-        reject({ [fieldOfError[error.code]]: error.code });
-      } else if (error instanceof ApiError && error.code === "invalid_code") {
-        reject({ code: "invalid_code" });
+      if (error instanceof ApiError && error.code === "submission_pending") {
+        setRecovery({ kind: "saving" });
+      } else if (error instanceof ApiError && error.code === "submission_unresolved") {
+        // An earlier attempt for this address needs a person; this one created nothing.
+        clearPending();
+        setRecovery({ kind: "help", reference: error.reference ?? "", resumable: false });
       } else {
-        setFailure(error);
+        // Refused before anything was created: the attempt is over. An unknown outcome keeps its marker and
+        // goes straight to resuming: the answer may have been lost after the Report was created.
+        const unknown = error instanceof ApiError && UNKNOWN_OUTCOME.includes(error.code);
+        if (!unknown) clearPending();
+        if (unknown) {
+          dispatchFailure.current = error;
+          setRecovery({ kind: "saving" });
+        } else if (error instanceof ApiError && isFieldError(error.code)) {
+          reject({ [fieldOfError[error.code]]: error.code });
+        } else if (error instanceof ApiError && error.code === "invalid_code") {
+          reject({ code: "invalid_code" });
+        } else {
+          setFailure(error);
+        }
       }
     } finally {
       setBusy(null);
@@ -183,8 +291,13 @@ export function Component() {
     setCodeSent(false);
     setResendAt(null);
     setFiled(null);
+    setRecovery(null);
   }
 
+  if (recovery?.kind === "saving") return <StillSaving />;
+  if (recovery?.kind === "help") {
+    return <NeedsHelp reference={recovery.reference} contact={config.codeSentHelp} />;
+  }
   if (filed) return <Confirmation report={filed} onAnother={startOver} />;
 
   const errorCount = Object.keys(errors).length;

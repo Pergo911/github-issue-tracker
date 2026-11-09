@@ -8,7 +8,7 @@ import {
   type WireErrorCodeOf,
 } from "@shared/api/endpoints.ts";
 import { requireRole, type StaffCaller } from "../auth/require-role.ts";
-import { ApiFailure, commonErrorResponse, errorResponse } from "./errors.ts";
+import { ApiFailure, commonErrorResponse, errorResponse, type ErrorDetail } from "./errors.ts";
 
 /** The caller of a gated endpoint (one that declares a `role`); a public endpoint has none. */
 export type CallerOf<E extends AnyEndpoint> = [E["role"]] extends [undefined]
@@ -25,7 +25,7 @@ export interface HandlerContext<E extends AnyEndpoint> {
   /** Runs work after the response is sent (`ctx.waitUntil`): its failure never reaches the caller. */
   waitUntil: (work: Promise<unknown>) => void;
   /** Ends the request with one of this endpoint's error codes (or a common one). */
-  fail: (code: WireErrorCodeOf<E>, fields?: { path: string; code: string }[]) => never;
+  fail: (code: WireErrorCodeOf<E>, detail?: ErrorDetail) => never;
 }
 
 type App = Hono<{ Bindings: Env }>;
@@ -71,18 +71,17 @@ export function registerEndpoint<E extends AnyEndpoint>(
             // No execution context (a bare Hono test): the work simply runs on its own.
           }
         },
-        fail: (code, fields) => {
-          throw new ApiFailure(code, fields);
+        fail: (code, detail) => {
+          throw new ApiFailure(code, detail);
         },
       });
       return Response.json(result, { headers: { "cache-control": "no-store" } });
     } catch (error) {
       if (error instanceof ApiFailure) {
-        return errorResponse(
-          error.code,
-          statusOf(endpoint, error.code as WireErrorCodeOf<E>),
-          error.fields,
-        );
+        return errorResponse(error.code, statusOf(endpoint, error.code as WireErrorCodeOf<E>), {
+          reference: error.reference,
+          fields: error.fields,
+        });
       }
       console.error("unhandled error in", endpoint.method, endpoint.path, error);
       return commonErrorResponse("internal_error");

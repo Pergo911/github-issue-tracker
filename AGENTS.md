@@ -34,6 +34,7 @@ Run everything from `app/`, with npm. `package.json` has the full script list; t
 | `npm run test:visual` | the same screens against `e2e/reference/*.png`, rendered in Playwright's Docker image | in `verify`; run it alone after UI changes |
 | `npm run test:visual:update` | rewrites the reference images | only after you opened the diffs and each change is intended |
 | `npm run dev` · `npm run seed` · `npm run reset` | the dev server (it hosts the fake GitHub and Resend) · Appendix A configuration into local KV · clear all local state | seed once per worktree before `dev` |
+| `npm run recovery -- <list\|inspect\|associate\|discard> ...` | the operator CLI for submissions that need a person (`docs/runbook-submission-recovery.md`) | against a deployed Worker with your own GitHub token; the e2e tests run it against the dev server |
 | `npm run world -- <method> [arg ...]` | drives the running local world: seed Reports and Staff users, approve a device code, read the outbox, inject faults | with `npm run dev` running; see below |
 
 `npm run setup` installs the Chromium that `test:e2e` and `screenshots` use. `npm run test:visual` needs Docker
