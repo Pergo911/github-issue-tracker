@@ -11,11 +11,14 @@ import {
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status: number;
-  constructor(code: ApiErrorCode, status: number) {
+  /** The fields a refused save names, when the answer carried them. */
+  readonly fields: { path: string; code: string }[];
+  constructor(code: ApiErrorCode, status: number, fields: { path: string; code: string }[] = []) {
     super(code);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.fields = fields;
   }
 }
 
@@ -82,7 +85,7 @@ export async function callApi<E extends AnyEndpoint>(
 
   const failure = apiErrorBodySchema.safeParse(body);
   if (failure.success && isApiErrorCode(failure.data.error.code)) {
-    throw new ApiError(failure.data.error.code, response.status);
+    throw new ApiError(failure.data.error.code, response.status, failure.data.error.fields);
   }
   throw new ApiError("invalid_response", response.status);
 }

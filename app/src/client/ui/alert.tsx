@@ -30,7 +30,7 @@ export function Alert({
       {variant === "danger" || variant === "attention" ? (
         <AlertIcon size={16} className={`mt-0.5 shrink-0 ${color}`} aria-hidden="true" />
       ) : null}
-      <div className="flex flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-1">
         {title ? <p className="font-semibold">{title}</p> : null}
         {children}
       </div>
