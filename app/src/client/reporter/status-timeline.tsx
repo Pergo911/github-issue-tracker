@@ -75,7 +75,11 @@ function EventRow({ item }: { item: Exclude<StatusTimelineItem, { kind: "comment
   );
 }
 
-function CommentRow({ item }: { item: Extract<StatusTimelineItem, { kind: "comment" }> }) {
+function CommentRow({
+  item,
+}: {
+  item: Extract<StatusTimelineItem, { kind: "comment" }> & { login?: string };
+}) {
   const t = useT();
   const format = useFormatter();
   const label =
@@ -88,6 +92,7 @@ function CommentRow({ item }: { item: Extract<StatusTimelineItem, { kind: "comme
       <div className="min-w-0 flex-1 rounded-md border">
         <div className="flex flex-wrap items-baseline gap-x-2 rounded-t-md border-b border-border-subtle bg-muted py-1 pr-1 pl-4 text-sm text-muted-foreground">
           <h3 className="font-semibold text-foreground">{label}</h3>
+          {item.login ? <span>· {item.login}</span> : null}
           <span>· {format.dateTime(item.at)}</span>
         </div>
         <p className="m-4 text-sm break-words whitespace-pre-wrap">{item.text}</p>
@@ -101,7 +106,12 @@ function CommentRow({ item }: { item: Extract<StatusTimelineItem, { kind: "comme
  * and timeline"): a 2px line, round badges, the localized Reporter or Staff label and never an avatar or a login
  * (SPEC 4.3). Timestamps are in the Deployment's time zone.
  */
-export function StatusTimeline({ items }: { items: readonly StatusTimelineItem[] }) {
+export function StatusTimeline({
+  items,
+}: {
+  /** A comment may carry its author's login: only the Staff dashboard passes one (SPEC 4.3 keeps it off the Status page). */
+  items: readonly (StatusTimelineItem & { login?: string })[];
+}) {
   return (
     <ol className="relative flex flex-col before:absolute before:top-0 before:bottom-0 before:left-4 before:w-0.5 before:bg-border-subtle">
       {items.map((item, index) =>

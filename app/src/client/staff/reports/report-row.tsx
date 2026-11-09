@@ -1,4 +1,5 @@
 import { AlertIcon, IssueClosedIcon, IssueOpenedIcon, SkipIcon } from "@primer/octicons-react";
+import { Link } from "react-router";
 import { useFormatter } from "@/config/context.tsx";
 import { useT } from "@/i18n/context.tsx";
 import { LabelPill } from "@/ui/label-pill.tsx";
@@ -48,9 +49,13 @@ export function ReportListRow({ row, now }: { row: ReportRow; now: number }) {
       </span>
       <div className="flex min-w-0 flex-col gap-1 pt-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-base font-medium break-words" data-report-title="">
+          <Link
+            to={`/staff/reports/${row.number}`}
+            className="text-base font-medium break-words hover:text-link hover:underline"
+            data-report-title=""
+          >
             {row.title}
-          </span>
+          </Link>
           {row.pills.map((pill) => (
             <LabelPill key={`${pill.dimension}:${pill.text}`} text={pill.text} color={pill.color} />
           ))}

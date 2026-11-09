@@ -6,7 +6,12 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 /** The accessibility violations on the page as it is right now, as short readable lines. */
 export async function axeViolations(page: Page): Promise<string[]> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const results = await new AxeBuilder({ page })
+    .withTags(WCAG_TAGS)
+    // Base UI's popups bracket themselves with aria-hidden, focusable guard spans on purpose (they trap and
+    // return focus); axe reports them only while a popup is open, and only sometimes.
+    .exclude("[data-base-ui-focus-guard]")
+    .analyze();
   return results.violations.map(
     (violation) =>
       `${violation.id} (${violation.impact ?? "n/a"}): ${violation.help}\n    ` +
