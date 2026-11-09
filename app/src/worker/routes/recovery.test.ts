@@ -211,6 +211,32 @@ describe("POST /api/reports/resume", () => {
     expect(resumed.body).toMatchObject({ status: "complete", number: 102 });
   });
 
+  it("treats a create that timed out as uncertain: the scan finds nothing, so a person is needed", async () => {
+    const { credential, answer } = await interruptedSubmit(
+      createFault({ type: "timeout", holdMs: 12_000 }),
+    );
+    expect(answer.status).toBe(503);
+    const resumed = await post("resume", { email: listed, credential });
+    expect(resumed.body["status"]).toBe("needs_help");
+    expect(await issues()).toEqual([]);
+  }, 25_000);
+
+  it("keeps saying saving while GitHub cannot be scanned, then settles when it can", async () => {
+    const { credential } = await interruptedSubmit(createFault({ type: "lost-response" }));
+    fakeWorld().control.addFault({
+      service: "github",
+      method: "GET",
+      path: "^/repos/.+/issues$",
+      effect: { type: "status", status: 503 },
+    });
+    expect((await post("resume", { email: listed, credential })).body).toEqual({
+      status: "saving",
+    });
+    const settled = await post("resume", { email: listed, credential });
+    expect(settled.body).toMatchObject({ status: "complete", number: 1 });
+    expect(await issues()).toHaveLength(1);
+  });
+
   it("marks a stale dispatch fence uncertain after a crash and settles it by the marker", async () => {
     const world = fakeWorld();
     world.control.holdWebhooks();
