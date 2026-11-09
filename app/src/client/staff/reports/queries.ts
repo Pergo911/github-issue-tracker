@@ -1,7 +1,14 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { GitHubIssue, GitHubTimelineEvent, GitHubUser } from "@shared/github/types.ts";
+import type {
+  GitHubComment,
+  GitHubIssue,
+  GitHubTimelineEvent,
+  GitHubUser,
+} from "@shared/github/types.ts";
+import type { ExpectedBot } from "@shared/reports/attribution.ts";
 import { staffSession } from "../auth/session.ts";
 import { GitHubHttpError } from "../github/session.ts";
+import { scanReporterComments } from "./reporter-comments.ts";
 
 interface Repo {
   owner: string;
@@ -74,5 +81,26 @@ export const reportSearchQuery = (repo: Repo, text: string) =>
         ),
       ),
     refetchOnMount: "always",
+    retry: false,
+  });
+
+/**
+ * The Reporter-comment scan (SPEC 2.4): every page of the repo's comments, classified by Bot identity plus the
+ * canonical envelope and grouped by issue. It lives in the TanStack Query cache only, never in KV. It is never
+ * refetched on its own (a Report's list reloads on every visit; this costs a request per hundred comments), only
+ * by the manual refresh, which rebuilds it from scratch, so edits and deletions show.
+ */
+export const reporterCommentsQuery = (repo: Repo, bot: ExpectedBot) =>
+  queryOptions({
+    queryKey: ["staff", "reporter-comments", repo.owner, repo.name],
+    queryFn: async () =>
+      scanReporterComments(
+        await staffSession.githubFetchAll<GitHubComment>(`${repoPath(repo)}/issues/comments`),
+        bot,
+      ),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     retry: false,
   });
