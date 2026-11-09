@@ -98,5 +98,11 @@ export function statusOf<E extends AnyEndpoint>(endpoint: E, code: WireErrorCode
 }
 
 /** The body of every error response: `{ "error": { "code": "..." } }`. */
-export const apiErrorBodySchema = z.object({ error: z.object({ code: z.string().min(1) }) });
+export const apiErrorBodySchema = z.object({
+  error: z.object({
+    code: z.string().min(1),
+    /** Which fields a refused save names (the configuration's `invalid_config`), as path and stable code. */
+    fields: z.array(z.object({ path: z.string(), code: z.string() })).optional(),
+  }),
+});
 export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>;
