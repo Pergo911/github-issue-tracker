@@ -3,6 +3,20 @@ import { issueExists } from "../recovery/scan.ts";
 import { kvWriter } from "./kv-writer.ts";
 import { reach } from "./probe.ts";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The per-Report daily budgets of SPEC 4.5: Reporter comments, and Reissues by a link holder. */
+export const REPORT_DAILY_LIMITS = { comment: 20, reissue: 3 } as const;
+export type ReportBudget = keyof typeof REPORT_DAILY_LIMITS;
+
+/** What a Reissue did, as the gate reports it. */
+export type TokenReplacement =
+  | { kind: "replaced"; email: string; newToken: string; oldToken: string }
+  /** The Report has no token or no address in KV (erased, or never finalized): nothing was changed. */
+  | { kind: "unknown" }
+  /** The presented link is no longer the Report's current one (it was replaced meanwhile): nothing was changed. */
+  | { kind: "stale" };
+
 /**
  * Report gate, one per issue number (SPEC 4.1, 4.5, 5): the single writer of a Report's three KV mappings, and
  * the owner of its lifecycle: finalization progress, the token generation a Reissue bumps, and the deletion
@@ -68,6 +82,62 @@ export class ReportGate extends DurableObject<Env> {
 
   private write(life: Lifecycle): void {
     this.ctx.storage.kv.put(LIFE, life);
+  }
+
+  /** Spends one unit of today's budget (the UTC day): `false` once the day's limit is reached. Atomic. */
+  take(budget: ReportBudget, now: number = Date.now()): boolean {
+    const day = Math.floor(now / DAY_MS);
+    const kv = this.ctx.storage.kv;
+    const stored = kv.get<{ day: number; comment: number; reissue: number }>("daily");
+    const counts = stored?.day === day ? stored : { day, comment: 0, reissue: 0 };
+    if (counts[budget] >= REPORT_DAILY_LIMITS[budget]) return false;
+    kv.put("daily", { ...counts, [budget]: counts[budget] + 1 });
+    return true;
+  }
+
+  /**
+   * Replaces a Report's Status token for a Reissue (SPEC 4.3) on the lifecycle: a new token on the next generation,
+   * written new-first and the old one deleted by the repair. `presentedToken` is the link a holder used: a second
+   * Reissue from a link that was just replaced finds it stale and changes nothing. Staff pass none. The new token
+   * is returned to the Worker only, never to a caller. A Report with no lifecycle record (mappings written before
+   * the lifecycle existed) is replaced directly in KV.
+   */
+  async replaceToken(input: {
+    issueNumber: number;
+    newToken: string;
+    presentedToken?: string;
+  }): Promise<TokenReplacement> {
+    const { issueNumber, newToken, presentedToken } = input;
+    const life = this.read();
+    if (life) {
+      if (life.state === "deleted" || !life.email) return { kind: "unknown" };
+      // Written but gone from KV: erased out of band, so there is no address to tell.
+      if (life.written.email && (await this.env.KV.get(`issue-email:${issueNumber}`)) === null) {
+        return { kind: "unknown" };
+      }
+      if (presentedToken !== undefined && presentedToken !== life.statusToken) {
+        return { kind: "stale" };
+      }
+      const { email, statusToken: oldToken } = life;
+      try {
+        await this.reissue(newToken);
+      } catch (error) {
+        // The new generation is recorded and an alarm repairs the mappings: the Reissue itself stands.
+        console.error("a Reissue repair pass failed; it is re-armed", error);
+      }
+      return { kind: "replaced", email, newToken, oldToken };
+    }
+    const [oldToken, email] = await Promise.all([
+      this.env.KV.get(`issue-token:${issueNumber}`),
+      this.env.KV.get(`issue-email:${issueNumber}`),
+    ]);
+    if (oldToken === null || email === null) return { kind: "unknown" };
+    if (presentedToken !== undefined && presentedToken !== oldToken) return { kind: "stale" };
+    // The new mapping first, so there is never a moment with no working link.
+    await this.env.KV.put(`status-token:${newToken}`, String(issueNumber));
+    await this.env.KV.put(`issue-token:${issueNumber}`, newToken);
+    await this.env.KV.delete(`status-token:${oldToken}`);
+    return { kind: "replaced", email, newToken, oldToken };
   }
 
   /**

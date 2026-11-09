@@ -1,7 +1,6 @@
 import type { Hono } from "hono";
 import { endpoints } from "@shared/api/endpoints.ts";
-import { labelName, type Config } from "@shared/config/schema.ts";
-import { renderEmail, type TemplateName } from "@shared/email/render.ts";
+import { labelName } from "@shared/config/schema.ts";
 import { catalogFor, createTranslator } from "@shared/i18n/index.ts";
 import type { GitHubIssue } from "@shared/github/types.ts";
 import { buildReportBody } from "@shared/reports/body.ts";
@@ -12,42 +11,13 @@ import { OTP_TTL_MS, type CompletionReceipt, type RecoverView } from "../gates/e
 import { reach } from "../gates/probe.ts";
 import { createBotClient } from "../github/bot-client.ts";
 import { injectedCreateFailures } from "../dev/local-world.ts";
-import { sendMail } from "../resend/send-mail.ts";
 import { randomToken, sha256Hex } from "../util/crypto.ts";
+import { appBase, clientKey, sendTemplate } from "../util/request.ts";
 
 /**
  * The Submission form's two endpoints (SPEC 4.1): request a code, and verify the code and file the Report.
  * The Reporter's email goes to the gates, KV and Resend, and never into a GitHub write.
  */
-
-/** Per-IP limits key on the connecting address; the local world lets a test pick its own client. */
-function clientKey(env: Env, request: Request): string {
-  const local = env.LOCAL_WORLD ? request.headers.get("x-dev-client-ip") : null;
-  return local ?? request.headers.get("cf-connecting-ip") ?? "unknown";
-}
-
-/** The Status link's base: the Deployment's `APP_URL`, or in the local world the origin the SPA is served from. */
-function appBase(env: Env, request: Request): string {
-  const base = env.LOCAL_WORLD ? new URL(request.url).origin : env.APP_URL;
-  return base.replace(/\/+$/, "");
-}
-
-async function sendTemplate(
-  env: Env,
-  config: Config,
-  template: TemplateName,
-  to: string,
-  params: Record<string, string | number>,
-): Promise<void> {
-  const mail = renderEmail({ config, sendingDomain: env.RESEND_FROM_DOMAIN, template, to, params });
-  await sendMail(env, {
-    from: mail.from,
-    to: mail.to,
-    subject: mail.subject,
-    text: mail.text,
-    ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
-  });
-}
 
 /** Canonical JSON of the validated payload, in a fixed key order, hashed: replays must match it exactly. */
 function fingerprintOf(email: string, fields: Record<string, string | undefined>): Promise<string> {

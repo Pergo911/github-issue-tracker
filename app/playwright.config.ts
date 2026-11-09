@@ -71,6 +71,7 @@ export default defineConfig({
         "submission.spec.ts",
         "recovery.spec.ts",
         "staff.spec.ts",
+        "status.spec.ts",
         "sweep.spec.ts",
         "world.spec.ts",
       ],
