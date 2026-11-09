@@ -45,6 +45,8 @@ interface Lifecycle {
   stale: string[];
   /** The Email gate attempt waiting to be told that finalization is done. */
   attempt: { emailHash: string; credentialHash: string } | null;
+  /** Where the 24-hour receipt of the registering attempt lives: kept after completion, so an Erasure can cancel it. */
+  receipt?: { emailHash: string; credentialHash: string } | null;
   failures: number;
 }
 
@@ -161,6 +163,7 @@ export class ReportGate extends DurableObject<Env> {
       written: { email: false, statusToken: false, issueToken: false },
       stale: [],
       attempt: input.attempt,
+      receipt: input.attempt,
       failures: 0,
     };
     this.write(life);
@@ -341,34 +344,45 @@ export class ReportGate extends DurableObject<Env> {
   }
 
   /**
-   * The deletion tombstone (SPEC 4.2, 5; an Erasure ticket calls it): the Report is gone, so its mappings, its
-   * attempt locator and any delayed repair go with it. The issue-number record stays: GitHub never reuses it.
+   * The deletion tombstone (SPEC 4.2, 5): the Report is gone, so its mappings, its attempt locator, its receipt and
+   * any delayed repair go with it. The issue-number record stays: GitHub never reuses it. `issueNumber` is the
+   * number the `deleted` webhook names, for a Report whose gate holds no lifecycle (mappings written before it
+   * existed, or deleted before it was ever registered): the tombstone then still stops a later registration.
    */
-  async tombstone(): Promise<void> {
+  async tombstone(issueNumber?: number): Promise<void> {
     const life = this.read();
+    const number = life?.issueNumber ?? issueNumber ?? 0;
     const gone: Lifecycle = {
       state: "deleted",
-      issueNumber: life?.issueNumber ?? 0,
+      issueNumber: number,
       email: "",
       statusToken: "",
       generation: life?.generation ?? 1,
       written: { email: true, statusToken: true, issueToken: true },
       stale: [],
       attempt: null,
+      receipt: null,
       failures: 0,
     };
+    // Recorded first: from here on every repair pass and Reissue sees the deletion.
     this.write(gone);
-    if (!life) return;
+    await this.ctx.storage.deleteAlarm();
+    if (number === 0) return;
+    const current = await this.env.KV.get(`issue-token:${number}`);
+    const tokens = [life?.statusToken, ...(life?.stale ?? []), current].filter(
+      (token): token is string => Boolean(token),
+    );
     const keys = [
-      `issue-email:${life.issueNumber}`,
-      `issue-token:${life.issueNumber}`,
-      ...[life.statusToken, ...life.stale].filter(Boolean).map((token) => `status-token:${token}`),
+      `issue-email:${number}`,
+      `issue-token:${number}`,
+      ...new Set(tokens.map((token) => `status-token:${token}`)),
     ];
     for (const key of keys) await kvWriter.delete(this.env, key);
-    if (life.attempt) {
-      await this.env.EMAIL_GATE.getByName(life.attempt.emailHash).dropAttempt(
-        life.attempt.credentialHash,
-      );
+    const locator = life?.attempt ?? life?.receipt;
+    if (locator) {
+      const emailGate = this.env.EMAIL_GATE.getByName(locator.emailHash);
+      await emailGate.dropAttempt(locator.credentialHash);
+      await emailGate.dropReceipt(locator.credentialHash);
     }
   }
 

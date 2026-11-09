@@ -9,6 +9,7 @@ import { registerRecovery } from "./routes/recovery.ts";
 import { registerReports } from "./routes/reports.ts";
 import { registerStaff } from "./routes/staff.ts";
 import { registerStatus } from "./routes/status.ts";
+import { registerWebhook } from "./routes/webhook.ts";
 
 /**
  * The Worker's Hono app. It only ever runs for /api/* (`run_worker_first` in wrangler.jsonc); everything
@@ -25,4 +26,5 @@ registerStaff(app);
 registerContact(app);
 registerAllowlist(app);
 registerConfig(app);
+registerWebhook(app);
 registerLocalWorld(app);
