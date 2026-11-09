@@ -117,6 +117,11 @@ export const hu = {
     "Ez a kód nem érvényes. Ellenőrizze, vagy kérjen újat. Öt hibás próbálkozás után a kód érvényét veszti.",
   "api.error.submission_pending":
     "A bejelentés mentése még folyamatban van. Ne küldje be újra: kérje meg a karbantartókat, hogy nézzék meg.",
+  "api.error.submission_unresolved":
+    "Egy korábbi bejelentés ettől a címtől emberi segítségre vár, mielőtt újat lehetne küldeni.",
+  "api.error.recovery_not_found": "Nincs ilyen azonosítójú vagy címhez tartozó mentett bejelentés.",
+  "api.error.issue_unverified":
+    "Ez a bejelentés nem kapcsolható hozzá: nem létezik, nem bejelentés, vagy már hozzá van kapcsolva.",
   "api.error.title_length": "A címnek 3 és 80 karakter közöttinek kell lennie.",
   "api.error.title_characters":
     "A cím csak betűket, számokat, szóközöket és ezeket a jeleket tartalmazhatja: . , ! ? ( ) ' \" - – — ‘ ’ “ ”",

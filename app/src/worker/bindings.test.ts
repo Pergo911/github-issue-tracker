@@ -13,15 +13,8 @@ describe("bindings declared in wrangler.jsonc", () => {
   it("has the three SQLite-backed gates, reachable by name", async () => {
     expect(await env.GLOBAL_GATE.getByName("bindings-test").take(1)).toBe(true);
     expect(await env.EMAIL_GATE.getByName("bindings-test").issueCode()).toMatch(/^\d{6}$/);
-    await env.REPORT_GATE.getByName("bindings-test").writeMappings({
-      issueNumber: 0,
-      email: "bindings@example.hu",
-      statusToken: "bindings-test-token",
-    });
-    expect(await env.KV.get("issue-token:0")).toBe("bindings-test-token");
-    for (const key of ["issue-email:0", "issue-token:0", "status-token:bindings-test-token"]) {
-      await env.KV.delete(key);
-    }
+    // A Report gate nobody registered has no lifecycle yet.
+    expect(await env.REPORT_GATE.getByName("bindings-test").view()).toBeNull();
   });
 
   it("has every Rate Limiting binding SPEC 4.5 needs", async () => {

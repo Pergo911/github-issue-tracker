@@ -11,11 +11,14 @@ import {
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status: number;
-  constructor(code: ApiErrorCode, status: number) {
+  /** A submission's reference, when the error carries one (`submission_unresolved`). */
+  readonly reference: string | undefined;
+  constructor(code: ApiErrorCode, status: number, reference?: string) {
     super(code);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.reference = reference;
   }
 }
 
@@ -82,7 +85,7 @@ export async function callApi<E extends AnyEndpoint>(
 
   const failure = apiErrorBodySchema.safeParse(body);
   if (failure.success && isApiErrorCode(failure.data.error.code)) {
-    throw new ApiError(failure.data.error.code, response.status);
+    throw new ApiError(failure.data.error.code, response.status, failure.data.error.reference);
   }
   throw new ApiError("invalid_response", response.status);
 }

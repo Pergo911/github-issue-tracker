@@ -8,7 +8,8 @@ import { buildReportBody } from "@shared/reports/body.ts";
 import { normalizeEmail, validateFields } from "@shared/reports/validate.ts";
 import { registerEndpoint } from "../api/register.ts";
 import { loadConfig } from "../config/load.ts";
-import { OTP_TTL_MS } from "../gates/email-gate.ts";
+import { OTP_TTL_MS, type CompletionReceipt, type RecoverView } from "../gates/email-gate.ts";
+import { reach } from "../gates/probe.ts";
 import { createBotClient } from "../github/bot-client.ts";
 import { sendMail } from "../resend/send-mail.ts";
 import { randomToken, sha256Hex } from "../util/crypto.ts";
@@ -59,6 +60,16 @@ function fingerprintOf(email: string, fields: Record<string, string | undefined>
       fields["place"] ?? null,
     ]),
   );
+}
+
+/**
+ * The receipt's Status token, only while it is still the Report's current one: a Reissue or an Erasure voids
+ * the receipt, so it never reveals a token that was replaced (SPEC 4.1).
+ */
+async function currentToken(env: Env, receipt: CompletionReceipt): Promise<string | null> {
+  const view = await env.REPORT_GATE.getByName(String(receipt.issueNumber)).view();
+  if (!view || view.state === "deleted" || view.generation !== receipt.generation) return null;
+  return receipt.statusToken;
 }
 
 export function registerReports(app: Hono<{ Bindings: Env }>): void {
@@ -134,18 +145,24 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
       case "conflict":
         return fail("invalid_request");
       case "pending":
-        return fail("submission_pending");
-      case "replay":
+        return outcome.unresolved
+          ? fail("submission_unresolved", outcome.reference)
+          : fail("submission_pending");
+      case "replay": {
+        const token = await currentToken(env, outcome.receipt);
+        if (token === null) return fail("not_found");
         return {
           number: outcome.receipt.issueNumber,
           title: outcome.receipt.title,
-          statusUrl: statusUrl(outcome.receipt.statusToken),
+          statusUrl: statusUrl(token),
         };
+      }
       case "verified":
         break;
     }
 
-    // Past the dispatch fence nothing here is ever repeated: a failure leaves the attempt pending for ticket #24.
+    // Past the dispatch fence the create is never repeated: a failure makes it uncertain, and recovery settles it
+    // by finding the marker (ADR 0005).
     let issueNumber: number;
     try {
       const t = createTranslator(catalogFor(config.language));
@@ -172,17 +189,23 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
         },
       });
       issueNumber = created.data.number;
-      await gate.recordIssue(credentialHash, issueNumber);
-      await env.REPORT_GATE.getByName(String(issueNumber)).writeMappings({
-        issueNumber,
-        email,
-        statusToken,
-      });
-      await gate.complete(credentialHash, Date.now());
+      reach("after-create");
     } catch (error) {
-      console.error("a verified submission is left pending", error);
+      console.error("the create is uncertain; recovery will look for its marker", error);
+      await gate.markUncertain(credentialHash).catch(() => undefined);
       return fail("submission_pending");
     }
+
+    // The issue number is persisted at once, then the Report gate registers and finalizes the mappings.
+    let finished: RecoverView;
+    try {
+      await gate.recordIssue(credentialHash, issueNumber);
+      finished = await gate.recover(Date.now());
+    } catch (error) {
+      console.error("a created Report is not finalized yet; recovery repairs it", error);
+      return fail("submission_pending");
+    }
+    if (finished.kind !== "complete") return fail("submission_pending");
 
     // Best effort: a failed confirmation is logged and never undoes completion.
     try {
@@ -195,5 +218,50 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
       console.error("the confirmation email could not be sent", error);
     }
     return { number: issueNumber, title: fields.title, statusUrl: statusUrl(statusToken) };
+  });
+
+  registerEndpoint(app, endpoints.resumeSubmission, async ({ env, input, request, fail }) => {
+    const config = await loadConfig(env.KV);
+    if (config === null) return fail("not_configured");
+    if (!(await env.RL_RESUME_IP.limit({ key: clientKey(env, request) })).success) {
+      return fail("rate_limited");
+    }
+
+    const email = normalizeEmail(input.email);
+    const credentialHash = await sha256Hex(`credential:${input.credential}`);
+    const gate = env.EMAIL_GATE.getByName(await sha256Hex(email));
+    // Only the attempt of this credential is read, and only it is advanced.
+    const view = await gate.resume(credentialHash, Date.now());
+    switch (view.kind) {
+      case "none":
+        return fail("not_found");
+      case "saving":
+        return { status: "saving" } as const;
+      case "needs_help":
+        return { status: "needs_help", reference: view.reference } as const;
+      case "complete": {
+        const token = await currentToken(env, view.receipt);
+        if (token === null) return fail("not_found");
+        const link = `${appBase(env, request)}/status/${token}`;
+        if (view.completedNow) {
+          // This pass finished the Report the first request could not: the Reporter still gets the email.
+          try {
+            await sendTemplate(env, config, "submissionConfirmation", email, {
+              number: view.receipt.issueNumber,
+              title: view.receipt.title,
+              link,
+            });
+          } catch (error) {
+            console.error("the confirmation email could not be sent", error);
+          }
+        }
+        return {
+          status: "complete",
+          number: view.receipt.issueNumber,
+          title: view.receipt.title,
+          statusUrl: link,
+        } as const;
+      }
+    }
   });
 }

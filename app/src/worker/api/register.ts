@@ -25,7 +25,7 @@ export interface HandlerContext<E extends AnyEndpoint> {
   /** Runs work after the response is sent (`ctx.waitUntil`): its failure never reaches the caller. */
   waitUntil: (work: Promise<unknown>) => void;
   /** Ends the request with one of this endpoint's error codes (or a common one). */
-  fail: (code: WireErrorCodeOf<E>) => never;
+  fail: (code: WireErrorCodeOf<E>, reference?: string) => never;
 }
 
 type App = Hono<{ Bindings: Env }>;
@@ -71,14 +71,18 @@ export function registerEndpoint<E extends AnyEndpoint>(
             // No execution context (a bare Hono test): the work simply runs on its own.
           }
         },
-        fail: (code) => {
-          throw new ApiFailure(code);
+        fail: (code, reference) => {
+          throw new ApiFailure(code, reference);
         },
       });
       return Response.json(result, { headers: { "cache-control": "no-store" } });
     } catch (error) {
       if (error instanceof ApiFailure) {
-        return errorResponse(error.code, statusOf(endpoint, error.code as WireErrorCodeOf<E>));
+        return errorResponse(
+          error.code,
+          statusOf(endpoint, error.code as WireErrorCodeOf<E>),
+          error.reference,
+        );
       }
       console.error("unhandled error in", endpoint.method, endpoint.path, error);
       return commonErrorResponse("internal_error");

@@ -120,6 +120,11 @@ export const en = {
     "That code is not valid. Check it, or ask for a new one. A code stops working after five wrong tries.",
   "api.error.submission_pending":
     "Your report is still being saved. Do not submit it again: ask the maintenance staff to check it.",
+  "api.error.submission_unresolved":
+    "An earlier report from this address needs help from a person before another can be sent.",
+  "api.error.recovery_not_found": "No saved report matches that reference or address.",
+  "api.error.issue_unverified":
+    "That issue cannot be linked: it is missing, not a report, or already linked.",
   "api.error.title_length": "The title must be 3 to 80 characters.",
   "api.error.title_characters":
     "The title may contain only letters, numbers, spaces and these marks: . , ! ? ( ) ' \" - – — ‘ ’ “ ”",

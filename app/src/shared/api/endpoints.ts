@@ -1,5 +1,11 @@
 import { z } from "zod";
 import type { PublicConfig } from "../config/public.ts";
+import {
+  REFERENCE_PATTERN,
+  type RecoveryDetail,
+  type RecoveryEntry,
+  type ResumeResult,
+} from "../reports/recovery.ts";
 import { FIELD_ERRORS } from "../reports/validate.ts";
 import type { StaffDeviceCode, StaffDevicePoll, StaffMeta, StaffTokens } from "../staff/session.ts";
 import {
@@ -17,6 +23,16 @@ export * from "./contract.ts";
 export const OTP_PATTERN = /^\d{6}$/;
 /** The attempt credential: at least 128 random bits, base64url (SPEC 4.1). 16 bytes is 22 characters. */
 export const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]{22,128}$/;
+
+/** An attempt is named by its address or by the reference the Reporter was given: exactly one of them. */
+const attemptSelector = z
+  .object({
+    email: z.string().trim().pipe(z.email().max(254)).optional(),
+    reference: z.string().regex(REFERENCE_PATTERN).optional(),
+  })
+  .refine((value) => (value.email === undefined) !== (value.reference === undefined), {
+    message: "give an email or a reference, not both",
+  });
 
 /** Each field-validation failure travels as its own code with a 422, so the SPA can say which field. */
 const fieldErrors = Object.fromEntries(FIELD_ERRORS.map((code) => [code, 422])) as {
@@ -68,7 +84,30 @@ export const endpoints = {
       place: z.string().max(2000).optional(),
     }),
     response: type<{ number: number; title: string; statusUrl: string }>(),
-    errors: { ...fieldErrors, not_configured: 404, invalid_code: 422, submission_pending: 503 },
+    errors: {
+      ...fieldErrors,
+      not_configured: 404,
+      invalid_code: 422,
+      submission_pending: 503,
+      // An earlier attempt for this address needs a person: its `reference` travels with the error.
+      submission_unresolved: 503,
+    },
+  }),
+
+  /**
+   * Resumes a verified submission after an interruption (SPEC 4.1): gated by the attempt credential, 10 a minute
+   * per address, and it reads and advances only that attempt. `not_found` for a credential that is unknown, spent
+   * or whose link a Reissue replaced.
+   */
+  resumeSubmission: defineEndpoint({
+    method: "POST",
+    path: "/api/reports/resume",
+    request: z.object({
+      email: z.string().trim().pipe(z.email().max(254)),
+      credential: z.string().regex(CREDENTIAL_PATTERN),
+    }),
+    response: type<ResumeResult>(),
+    errors: { not_configured: 404 },
   }),
 
   /** Starts GitHub's device flow for the Staff app (SPEC 2.2): a proxy, so no `client_secret` exists anywhere. */
@@ -95,6 +134,43 @@ export const endpoints = {
     response: type<StaffTokens>(),
     errors: { refresh_rejected: 401 },
   }),
+  /** The retained submission attempts that need a person (SPEC 4.1): the operator procedure's list. */
+  recoveryList: defineEndpoint({
+    method: "GET",
+    path: "/api/admin/recovery",
+    request: z.object({}),
+    response: type<{ attempts: RecoveryEntry[] }>(),
+    errors: {},
+    role: "admin",
+  }),
+  /** One retained attempt by reference or email, with a fresh look for its marker on GitHub. */
+  recoveryInspect: defineEndpoint({
+    method: "GET",
+    path: "/api/admin/recovery/attempt",
+    request: attemptSelector,
+    response: type<RecoveryDetail>(),
+    errors: { recovery_not_found: 404 },
+    role: "admin",
+  }),
+  /** Associates a verified existing issue with the attempt, which finalizes its mappings. Never a new create. */
+  recoveryAssociate: defineEndpoint({
+    method: "POST",
+    path: "/api/admin/recovery/associate",
+    request: attemptSelector.safeExtend({ issueNumber: z.int().positive() }),
+    response: type<{ outcome: "complete" | "saving"; number: number }>(),
+    errors: { recovery_not_found: 404, issue_unverified: 422 },
+    role: "admin",
+  }),
+  /** Discards the attempt and the partial mappings its issue may have gained. */
+  recoveryDiscard: defineEndpoint({
+    method: "POST",
+    path: "/api/admin/recovery/discard",
+    request: attemptSelector,
+    response: type<{ discarded: true }>(),
+    errors: { recovery_not_found: 404 },
+    role: "admin",
+  }),
+
   /** The caller's role, the repo and the expected Bot identity, for every Staff role (SPEC 2.4, 4.3). */
   staffMeta: defineEndpoint({
     method: "GET",
