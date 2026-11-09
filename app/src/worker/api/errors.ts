@@ -9,15 +9,17 @@ import {
 /** Failing from inside a handler: `fail("code")` throws this, and `registerEndpoint` answers with the code. */
 export class ApiFailure extends Error {
   readonly code: string;
-  constructor(code: string) {
+  readonly reference: string | undefined;
+  constructor(code: string, reference?: string) {
     super(code);
     this.code = code;
+    this.reference = reference;
   }
 }
 
 /** The error body every endpoint shares (`{ "error": { "code": "..." } }`), never carrying a message. */
-export function errorResponse(code: string, status: number): Response {
-  const body: ApiErrorBody = { error: { code } };
+export function errorResponse(code: string, status: number, reference?: string): Response {
+  const body: ApiErrorBody = { error: { code, ...(reference ? { reference } : {}) } };
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
 }
 

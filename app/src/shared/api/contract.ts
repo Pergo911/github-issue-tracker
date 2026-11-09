@@ -97,6 +97,12 @@ export function statusOf<E extends AnyEndpoint>(endpoint: E, code: WireErrorCode
   return own[code] ?? common[code] ?? 500;
 }
 
-/** The body of every error response: `{ "error": { "code": "..." } }`. */
-export const apiErrorBodySchema = z.object({ error: z.object({ code: z.string().min(1) }) });
+/** The body of every error response: `{ "error": { "code": "..." } }`, with a `reference` only where stated. */
+export const apiErrorBodySchema = z.object({
+  error: z.object({
+    code: z.string().min(1),
+    /** A submission's reference, for the codes that hand a Reporter to a person (SPEC 4.1). */
+    reference: z.string().min(1).max(40).optional(),
+  }),
+});
 export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>;
