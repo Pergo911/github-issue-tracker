@@ -23,6 +23,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: Home },
       { path: "report", lazy: () => import("../reporter/submission-form.tsx") },
+      { path: "status/:token", lazy: () => import("../reporter/status-page.tsx") },
       {
         // Everything under /staff is the `staff/` chunk, loaded only when a member goes there (SPEC 2.6).
         path: "staff",

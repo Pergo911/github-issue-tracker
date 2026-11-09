@@ -6,6 +6,7 @@ import { registerLocalWorld } from "./dev/local-world.ts";
 import { registerPublicConfig } from "./routes/public-config.ts";
 import { registerReports } from "./routes/reports.ts";
 import { registerStaff } from "./routes/staff.ts";
+import { registerStatus } from "./routes/status.ts";
 
 /**
  * The Worker's Hono app. It only ever runs for /api/* (`run_worker_first` in wrangler.jsonc); everything
@@ -16,6 +17,7 @@ export const app = new Hono<{ Bindings: Env }>();
 installApiErrorHandling(app);
 registerPublicConfig(app);
 registerReports(app);
+registerStatus(app);
 registerStaff(app);
 registerAllowlist(app);
 registerConfig(app);
