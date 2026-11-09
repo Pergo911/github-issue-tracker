@@ -43,7 +43,9 @@ function payload(
   } as unknown as GitHubIssuesWebhookPayload;
 }
 
-const cases: { name: string; event: GitHubIssuesWebhookPayload; expected: Classification }[] = [
+type Case = { name: string; event: GitHubIssuesWebhookPayload; expected: Classification };
+
+const cases: Case[] = [
   // Dropped before anything else
   { name: "deleted erases", event: payload("deleted"), expected: { kind: "erase" } },
   {
@@ -143,7 +145,7 @@ const cases: { name: string; event: GitHubIssuesWebhookPayload; expected: Classi
     event: payload("unlabeled", { label: "status:in-progress" }),
     expected: { kind: "ignore", why: "no-major-change" },
   },
-  ...["opened", "edited", "assigned", "unassigned"].map((action) => ({
+  ...["opened", "edited", "assigned", "unassigned"].map((action): Case => ({
     name: action,
     event: payload(action),
     expected: { kind: "ignore", why: "no-major-change" },
