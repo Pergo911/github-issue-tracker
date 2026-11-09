@@ -1,9 +1,16 @@
-import { AlertIcon, IssueClosedIcon, IssueOpenedIcon, SkipIcon } from "@primer/octicons-react";
+import {
+  AlertIcon,
+  CommentIcon,
+  IssueClosedIcon,
+  IssueOpenedIcon,
+  SkipIcon,
+} from "@primer/octicons-react";
 import { Link } from "react-router";
 import { useFormatter } from "@/config/context.tsx";
 import { useT } from "@/i18n/context.tsx";
 import { LabelPill } from "@/ui/label-pill.tsx";
 import type { ReportRow } from "./model.ts";
+import type { ReporterCommentInfo } from "./reporter-comments.ts";
 
 function StateIcon({ row }: { row: ReportRow }) {
   const t = useT();
@@ -36,7 +43,16 @@ function StateIcon({ row }: { row: ReportRow }) {
  * opened <age>`, the label pills in their configured colours, a warning when the Status needs correction, and
  * the assignee. A Report is never left out of the list because of what its labels say.
  */
-export function ReportListRow({ row, now }: { row: ReportRow; now: number }) {
+export function ReportListRow({
+  row,
+  now,
+  reporter,
+}: {
+  row: ReportRow;
+  now: number;
+  /** What the Reporter-comment scan found, or `undefined` when it found none or has not run. */
+  reporter?: ReporterCommentInfo | undefined;
+}) {
   const t = useT();
   const format = useFormatter();
   return (
@@ -67,6 +83,15 @@ export function ReportListRow({ row, now }: { row: ReportRow; now: number }) {
               age: format.relativeTime(row.createdAt, now),
             })}
           </span>
+          {reporter ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-accent-muted px-2 py-0.5 font-medium text-link"
+              data-reporter-mark=""
+            >
+              <CommentIcon size={12} aria-hidden="true" />
+              {t("reports.reporter.mark", { count: reporter.count })}
+            </span>
+          ) : null}
           {row.statusProblem ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-attention-muted px-2 py-0.5 font-medium text-attention">
               <AlertIcon size={12} aria-hidden="true" />

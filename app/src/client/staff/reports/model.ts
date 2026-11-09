@@ -1,6 +1,7 @@
 import { DIMENSIONS, type Dimension } from "@shared/config/schema.ts";
 import type { PublicConfig } from "@shared/config/public.ts";
 import type { GitHubIssue } from "@shared/github/types.ts";
+import type { ReporterScan } from "./reporter-comments.ts";
 
 type Taxonomy = PublicConfig["taxonomy"];
 
@@ -119,6 +120,8 @@ export function sortReports(rows: readonly ReportRow[], taxonomy: Taxonomy): Rep
 }
 
 export interface ReportFilters {
+  /** Only Reports the Reporter-comment scan found comments on (the scan's result). */
+  reporterComments?: ReporterScan | undefined;
   /** `any` is for a search, which looks across the whole history. */
   state: "open" | "closed" | "any";
   category?: string | undefined;
@@ -139,6 +142,25 @@ export function filterReports(rows: readonly ReportRow[], filters: ReportFilters
       (filters.priority === undefined || row.priority === filters.priority) &&
       (filters.status === undefined || row.status === filters.status) &&
       (filters.assignee === undefined || row.assignees.includes(filters.assignee)) &&
-      (filters.untriaged !== true || row.priority === null),
+      (filters.untriaged !== true || row.priority === null) &&
+      (filters.reporterComments === undefined ||
+        filters.reporterComments[row.number] !== undefined),
+  );
+}
+
+/** The "last Reporter comment" sort (SPEC 2.4): the most recent first, Reports without one after, then the List's order. */
+export function sortByLastReporterComment(
+  rows: readonly ReportRow[],
+  scan: ReporterScan,
+): ReportRow[] {
+  const last = (row: ReportRow) => {
+    const found = scan[row.number];
+    return found ? Date.parse(found.last) : -Infinity;
+  };
+  return [...rows].sort(
+    (a, b) =>
+      (last(b) === last(a) ? 0 : last(b) > last(a) ? 1 : -1) ||
+      Date.parse(a.createdAt) - Date.parse(b.createdAt) ||
+      a.number - b.number,
   );
 }
