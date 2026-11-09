@@ -103,7 +103,7 @@ test.describe("home page", () => {
     expect(await background()).toBe("rgb(13, 17, 23)");
   });
 
-  test("leads to the placeholders, and a reporter never downloads the staff chunk", async ({
+  test("leads to the form and the placeholder, and a reporter never downloads the staff chunk", async ({
     page,
   }) => {
     const modules: string[] = [];
@@ -115,7 +115,11 @@ test.describe("home page", () => {
     await expect(page).toHaveURL(/\/report$/);
     expect(modules.some((url) => url.includes("/client/staff/"))).toBe(false);
 
-    await page.getByRole("link", { name: hu["nav.backToHome"] }).click();
+    await page
+      .getByRole("link", {
+        name: hu["header.homeLink"].replace("{organization}", referenceConfig.displayName),
+      })
+      .click();
     await page.getByRole("link", { name: hu["home.staff.title"] }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(hu["home.staff.title"]);
     expect(modules.some((url) => url.includes("/client/staff/"))).toBe(true);

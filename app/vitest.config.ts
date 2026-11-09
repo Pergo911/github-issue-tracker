@@ -77,6 +77,7 @@ export default defineConfig({
                 BOT_INSTALLATION_ID: String(TEST_BOT.installationId),
                 STAFF_APP_CLIENT_ID: TEST_STAFF_CLIENT_ID,
                 RESEND_FROM_DOMAIN: "mail.test",
+                APP_URL: "https://reports.test",
                 // Both halves from this one evaluation of the config, so they always match.
                 BOT_APP_PRIVATE_KEY: botKeys.privateKeyPkcs1,
                 TEST_BOT_PUBLIC_KEY: botKeys.publicKey,

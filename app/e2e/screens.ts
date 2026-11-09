@@ -39,6 +39,56 @@ export const VIEWPORTS = [
 ] as const;
 
 const configUrl = "**/api/config/public";
+const codeUrl = "**/api/reports/code";
+const submitUrl = "**/api/reports/submit";
+
+/** What a Reporter types: a Report's title and description are data too. */
+const typed = {
+  email: "anna.kiss@example.hu",
+  title: "Elakadt a lift a lépcsőházban",
+  description: "A lift megáll a lépcsőházban, és nem nyílik az ajtaja.",
+  place: "B lépcsőház, hátsó lift",
+};
+
+/**
+ * Text the Submission form shows that is data, not catalog wording: the Deployment's notices and taxonomy names,
+ * and what was typed. Longest first, so a short name never cuts a longer text it is part of.
+ */
+const formData: AllowedText[] = [
+  referenceConfig.displayName,
+  referenceConfig.emergencyNotice,
+  referenceConfig.codeSentHelp,
+  typed.description,
+  ...referenceConfig.taxonomy.category.map((value) => value.name),
+  ...referenceConfig.taxonomy.location.map((value) => value.name),
+].sort((a, b) => b.length - a.length);
+
+async function fillForm(page: Page, overrides: Partial<typeof typed> = {}) {
+  const values = { ...typed, ...overrides };
+  await page.locator("#email").fill(values.email);
+  await page.locator("#category").selectOption("elevator");
+  await page.locator("#location").selectOption("stairwell");
+  await page.locator("#title").fill(values.title);
+  await page.locator("#description").fill(values.description);
+  await page.locator("#place").fill(values.place);
+}
+
+const submitButton = (page: Page) => page.locator("form button[type=submit]");
+
+/** The countdown reads the clock: freeze it, so the screenshot always says the full minute. */
+const freezeClock = async (page: Page) => {
+  await page.clock.setFixedTime(new Date("2026-03-02T09:00:00Z"));
+};
+
+/** The answers a screen fakes, so its state does not spend the Deployment's daily code budget or per-IP limit. */
+const mockCodeSent = (page: Page) =>
+  page.route(codeUrl, (route) => route.fulfill({ status: 200, json: { accepted: true } }));
+
+const toCodeSent = async (page: Page) => {
+  await fillForm(page);
+  await submitButton(page).click();
+  await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
+};
 
 const headingShown = async (page: Page) => {
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -90,13 +140,153 @@ export const screens: Screen[] = [
     allowText: [referenceConfig.displayName],
   },
   {
-    id: "submission-placeholder",
-    description: "The Submission form's placeholder (ticket #23 replaces it).",
+    id: "submission-empty",
+    description:
+      "The Submission form as a Reporter first sees it: the emergency notice and empty fields.",
     server: "seeded",
     path: "/report",
     ready: headingShown,
-    allowText: [referenceConfig.displayName],
-    reference: false,
+    allowText: formData,
+  },
+  {
+    id: "submission-errors",
+    description:
+      "Send code pressed on an empty form: an inline error under each field and the summary.",
+    server: "seeded",
+    path: "/report",
+    ready: async (page) => {
+      await submitButton(page).click();
+      await expect(page.locator("[aria-invalid=true]").first()).toBeFocused();
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-title-rejected",
+    description:
+      "A title with a backtick: the catalog error naming the allowed characters; nothing is stripped.",
+    server: "seeded",
+    path: "/report",
+    ready: async (page) => {
+      await fillForm(page, { title: "Elakadt a `lift`" });
+      await submitButton(page).click();
+      await expect(page.locator("#title")).toHaveAttribute("aria-invalid", "true");
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-filled",
+    description: "Every field filled in, before a code is requested.",
+    server: "seeded",
+    path: "/report",
+    ready: async (page) => {
+      await fillForm(page);
+      await expect(page.locator("#place")).toHaveValue(typed.place);
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-code-sent",
+    description:
+      "Code requested: the generic notice, the configured help text and the resend countdown.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+    },
+    ready: toCodeSent,
+    allowText: formData,
+  },
+  {
+    id: "submission-code-wrong",
+    description:
+      "A wrong code entered and submitted: the code field's error, the form still editable.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+      await page.route(submitUrl, (route) =>
+        route.fulfill({ status: 422, json: { error: { code: "invalid_code" } } }),
+      );
+    },
+    ready: async (page) => {
+      await toCodeSent(page);
+      await page.locator("#code").fill("123456");
+      await submitButton(page).click();
+      await expect(page.locator("#code")).toHaveAttribute("aria-invalid", "true");
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-rate-limited",
+    description: "The Deployment's code budget or the per-address limit is spent: the 429 message.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await page.route(codeUrl, (route) =>
+        route.fulfill({ status: 429, json: { error: { code: "rate_limited" } } }),
+      );
+    },
+    ready: async (page) => {
+      await fillForm(page);
+      await submitButton(page).click();
+      await expect(page.getByRole("alert")).toBeVisible();
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-submitting",
+    description: "The final submit in flight: the form is locked and the button says so.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+      await page.route(submitUrl, () => {
+        // Never answered: the form stays in its submitting state.
+      });
+    },
+    ready: async (page) => {
+      await toCodeSent(page);
+      await page.locator("#code").fill("123456");
+      await submitButton(page).click();
+      await expect(page.locator("form[aria-busy=true]")).toBeVisible();
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-confirmation",
+    description:
+      "The confirmation page: the Report number, its title and the permanent Status link.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+      await page.route(submitUrl, (route) =>
+        route.fulfill({
+          status: 200,
+          json: {
+            number: 12,
+            title: typed.title,
+            statusUrl: "https://reports.example.hu/status/8s2Qn1vYt0xk7ZcLw3HfPA",
+          },
+        }),
+      );
+    },
+    ready: async (page) => {
+      await toCodeSent(page);
+      await page.locator("#code").fill("123456");
+      await submitButton(page).click();
+      await expect(page.getByRole("link", { name: /status/ })).toBeVisible();
+    },
+    allowText: [
+      ...formData,
+      typed.title,
+      "https://reports.example.hu/status/8s2Qn1vYt0xk7ZcLw3HfPA",
+      "#12",
+    ],
   },
   {
     id: "staff-placeholder",

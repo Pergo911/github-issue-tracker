@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-// The wrangler.jsonc bindings exist and work in the local Workers runtime. The gates are stubs for now
-// (SPEC 4.5): tickets #23 and #24 replace them, keeping the class names, the bindings and the migration.
+// The wrangler.jsonc bindings exist and work in the local Workers runtime. The gates themselves are tested in
+// their own files (SPEC 4.5).
 describe("bindings declared in wrangler.jsonc", () => {
   it("has a working KV namespace", async () => {
     await env.KV.put("bindings-test", "value");
@@ -10,11 +10,17 @@ describe("bindings declared in wrangler.jsonc", () => {
     await env.KV.delete("bindings-test");
   });
 
-  it("has the three SQLite-backed gates, each answering as a stub", async () => {
-    for (const gate of [env.EMAIL_GATE, env.REPORT_GATE, env.GLOBAL_GATE]) {
-      const response = await gate.getByName("bindings-test").fetch("https://gate.test/");
-      expect(response.status).toBe(501);
-      await response.arrayBuffer();
+  it("has the three SQLite-backed gates, reachable by name", async () => {
+    expect(await env.GLOBAL_GATE.getByName("bindings-test").take(1)).toBe(true);
+    expect(await env.EMAIL_GATE.getByName("bindings-test").issueCode()).toMatch(/^\d{6}$/);
+    await env.REPORT_GATE.getByName("bindings-test").writeMappings({
+      issueNumber: 0,
+      email: "bindings@example.hu",
+      statusToken: "bindings-test-token",
+    });
+    expect(await env.KV.get("issue-token:0")).toBe("bindings-test-token");
+    for (const key of ["issue-email:0", "issue-token:0", "status-token:bindings-test-token"]) {
+      await env.KV.delete(key);
     }
   });
 

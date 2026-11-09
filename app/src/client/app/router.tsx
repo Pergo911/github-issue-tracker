@@ -22,7 +22,7 @@ export const router = createBrowserRouter([
     ErrorBoundary: RouteError,
     children: [
       { index: true, Component: Home },
-      { path: "report", lazy: () => import("../reporter/submission-placeholder.tsx") },
+      { path: "report", lazy: () => import("../reporter/submission-form.tsx") },
       { path: "staff/*", lazy: () => import("../staff/sign-in-placeholder.tsx") },
       { path: "*", Component: NotFound },
     ],
