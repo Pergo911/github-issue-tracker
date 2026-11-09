@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { PublicConfig } from "../config/public.ts";
 import { FIELD_ERRORS } from "../reports/validate.ts";
+import type { StaffDeviceCode, StaffDevicePoll, StaffMeta, StaffTokens } from "../staff/session.ts";
 import {
   CLIENT_ERROR_CODES,
   COMMON_ERROR_STATUS,
@@ -68,6 +69,40 @@ export const endpoints = {
     }),
     response: type<{ number: number; title: string; statusUrl: string }>(),
     errors: { ...fieldErrors, not_configured: 404, invalid_code: 422, submission_pending: 503 },
+  }),
+
+  /** Starts GitHub's device flow for the Staff app (SPEC 2.2): a proxy, so no `client_secret` exists anywhere. */
+  staffDeviceCode: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/device-code",
+    request: z.object({}),
+    response: type<StaffDeviceCode>(),
+    errors: {},
+  }),
+  /** One poll of the device flow. */
+  staffDeviceToken: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/device-token",
+    request: z.object({ deviceCode: z.string().min(1).max(200) }),
+    response: type<StaffDevicePoll>(),
+    errors: {},
+  }),
+  /** Exchanges a refresh token for a new token pair; a refresh token works once. */
+  staffRefresh: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/refresh",
+    request: z.object({ refreshToken: z.string().min(1).max(200) }),
+    response: type<StaffTokens>(),
+    errors: { refresh_rejected: 401 },
+  }),
+  /** The caller's role, the repo and the expected Bot identity, for every Staff role (SPEC 2.4, 4.3). */
+  staffMeta: defineEndpoint({
+    method: "GET",
+    path: "/api/staff/meta",
+    request: z.object({}),
+    response: type<StaffMeta>(),
+    errors: {},
+    role: "viewer",
   }),
 };
 

@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { referenceConfig } from "../src/shared/seed/reference-config.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { urlFor, type ServerKind } from "./support/servers.ts";
+import { staffScreens } from "./staff-screens.ts";
 
 /**
  * THE declared list of screens and states. Every ticket that adds or changes a screen adds or edits its
@@ -288,15 +289,8 @@ export const screens: Screen[] = [
       "#12",
     ],
   },
-  {
-    id: "staff-placeholder",
-    description: "The Staff sign-in's placeholder (ticket #27 replaces it).",
-    server: "seeded",
-    path: "/staff",
-    ready: headingShown,
-    allowText: [referenceConfig.displayName],
-    reference: false,
-  },
+  // The Staff sign-in, device-code, no-access and List screens (ticket #27) are declared in staff-screens.ts.
+  ...staffScreens,
   {
     id: "not-found",
     description: "An address no route claims.",
