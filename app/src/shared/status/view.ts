@@ -66,7 +66,7 @@ export type StatusView = z.infer<typeof statusViewSchema>;
 export type StatusTimelineItem = StatusView["timeline"][number];
 export type StatusBody = StatusView["body"];
 
-function closeReasonOf(reason: string | null | undefined): CloseReason {
+export function closeReasonOf(reason: string | null | undefined): CloseReason {
   if (reason === "not_planned") return "rejected";
   if (reason === "duplicate") return "duplicate";
   return "fixed";

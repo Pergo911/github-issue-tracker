@@ -334,7 +334,12 @@ export class EmailGate extends DurableObject<Env> {
                 credentialHash: attempt.credentialHash,
               },
             });
-            await reportGate.converge();
+            const view = await reportGate.converge();
+            if (view?.state === "deleted") {
+              // The Report was erased before this attempt could finish: there is nothing left to finalize.
+              await this.dropAttempt(attempt.credentialHash);
+              return { kind: "none" };
+            }
           } catch (error) {
             console.error("finalizing the Report failed; it is retried", error);
             await this.fail(attempt.credentialHash);
@@ -398,6 +403,14 @@ export class EmailGate extends DurableObject<Env> {
     await this.unregister(attempt);
     await this.schedule();
     return true;
+  }
+
+  /** Forgets a completion receipt whose Report was deleted (Erasure): its replay would only reveal a dead link. */
+  async dropReceipt(credentialHash: string): Promise<boolean> {
+    const kv = this.ctx.storage.kv;
+    const had = kv.delete(`receipt:${credentialHash}`);
+    await this.schedule();
+    return had;
   }
 
   private async unregister(attempt: PendingAttempt): Promise<void> {
