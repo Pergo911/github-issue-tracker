@@ -5,6 +5,7 @@ import { referenceConfig } from "@shared/seed/reference-config.ts";
 import type { GitHubIssue } from "@shared/github/types.ts";
 import {
   filterReports,
+  sortByLastReporterComment,
   sortReports,
   toReportRow,
   type ReportFilters,
@@ -170,5 +171,32 @@ describe("filterReports", () => {
     expect(
       filterReports(reports, { ...none, category: "plumbing", status: "new", untriaged: true }),
     ).toHaveLength(1);
+  });
+});
+
+describe("Reporter-comment filter and sort", () => {
+  const a = row(["status:new"]);
+  const b = row(["status:new"]);
+  const c = row(["status:new"]);
+  const scan = {
+    [a.number]: { count: 1, last: "2026-03-01T00:00:00Z" },
+    [b.number]: { count: 2, last: "2026-03-09T00:00:00Z" },
+  };
+
+  it("keeps only Reports the scan found Reporter comments on", () => {
+    const kept = filterReports([a, b, c], { state: "open", reporterComments: scan });
+    expect(kept.map((r) => r.number)).toEqual([a.number, b.number]);
+  });
+
+  it("leaves everything when the filter is off", () => {
+    expect(filterReports([a, b, c], { state: "open" })).toHaveLength(3);
+  });
+
+  it("sorts the latest Reporter comment first, Reports without one last", () => {
+    expect(sortByLastReporterComment([c, a, b], scan).map((r) => r.number)).toEqual([
+      b.number,
+      a.number,
+      c.number,
+    ]);
   });
 });

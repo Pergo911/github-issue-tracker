@@ -28,6 +28,15 @@ export async function expectAccessible(page: Page): Promise<void> {
   for (const scheme of COLOR_SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(null))));
+    // Colours transition when the scheme changes: measure contrast once they have settled.
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+          .map((a) => a.finished.catch(() => null)),
+      ),
+    );
     expect(await axeViolations(page), `axe violations in ${scheme} mode`).toEqual([]);
   }
 }
