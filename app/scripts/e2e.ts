@@ -1,6 +1,6 @@
 // `npm run test:e2e [-- <playwright args>]`: the end-to-end suite against the real dev server, in your local
-// browser. Starts two Vite servers on free ports with their own state (one seeded with the Appendix A
-// configuration, one empty), runs axe, the pseudo-language sweep and the journeys, and cleans up.
+// browser. Starts three Vite servers on free ports with their own state (one seeded with the Appendix A
+// configuration, two empty: one for the not-configured screen, one a journey configures), runs axe, the pseudo-language sweep and the journeys, and cleans up.
 // Examples:  npm run test:e2e -- boot.spec.ts      npm run test:e2e -- -g "home page"
 import { prepareRun, runPlaywright } from "./lib/run.ts";
 

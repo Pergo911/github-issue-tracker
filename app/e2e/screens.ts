@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { referenceConfig } from "../src/shared/seed/reference-config.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { urlFor, type ServerKind } from "./support/servers.ts";
+import { adminScreens } from "./admin-screens.ts";
 import { staffScreens } from "./staff-screens.ts";
 
 /**
@@ -291,6 +292,8 @@ export const screens: Screen[] = [
   },
   // The Staff sign-in, device-code, no-access and List screens (ticket #27) are declared in staff-screens.ts.
   ...staffScreens,
+  // The Allowlist and Configuration screens (ticket #30) are declared in admin-screens.ts.
+  ...adminScreens,
   {
     id: "not-found",
     description: "An address no route claims.",

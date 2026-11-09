@@ -49,6 +49,12 @@ export function NotConfiguredScreen() {
     <BootMessage
       title={t("boot.notConfigured.title")}
       description={t("boot.notConfigured.description")}
+      action={
+        // A full page load on purpose: the router is not running while the Deployment has no configuration.
+        <a href="/staff" className="text-link hover:underline">
+          {t("boot.staffLink")}
+        </a>
+      }
     />
   );
 }

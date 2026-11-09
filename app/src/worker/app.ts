@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { installApiErrorHandling } from "./api/errors.ts";
+import { registerAllowlist } from "./routes/allowlist.ts";
+import { registerConfig } from "./routes/config.ts";
 import { registerLocalWorld } from "./dev/local-world.ts";
 import { registerPublicConfig } from "./routes/public-config.ts";
 import { registerReports } from "./routes/reports.ts";
@@ -15,4 +17,6 @@ installApiErrorHandling(app);
 registerPublicConfig(app);
 registerReports(app);
 registerStaff(app);
+registerAllowlist(app);
+registerConfig(app);
 registerLocalWorld(app);
