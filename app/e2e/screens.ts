@@ -42,6 +42,7 @@ export const VIEWPORTS = [
 const configUrl = "**/api/config/public";
 const codeUrl = "**/api/reports/code";
 const submitUrl = "**/api/reports/submit";
+const resumeUrl = "**/api/reports/resume";
 
 /** What a Reporter types: a Report's title and description are data too. */
 const typed = {
@@ -280,6 +281,125 @@ export const screens: Screen[] = [
       await toCodeSent(page);
       await page.locator("#code").fill("123456");
       await submitButton(page).click();
+      await expect(page.getByRole("link", { name: /status/ })).toBeVisible();
+    },
+    allowText: [
+      ...formData,
+      typed.title,
+      "https://reports.example.hu/status/8s2Qn1vYt0xk7ZcLw3HfPA",
+      "#12",
+    ],
+  },
+  {
+    id: "submission-saving",
+    description:
+      "The final submit was not confirmed: Still saving your report, with the advice not to send it again.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+      await page.route(submitUrl, (route) =>
+        route.fulfill({ status: 503, json: { error: { code: "submission_pending" } } }),
+      );
+      await page.route(resumeUrl, () => {
+        // Never answered: the tab keeps asking, and keeps saying it is still saving.
+      });
+    },
+    ready: async (page) => {
+      await toCodeSent(page);
+      await page.locator("#code").fill("123456");
+      await submitButton(page).click();
+      await expect(page.getByRole("status")).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-saving-refreshed",
+    description:
+      "The same tab refreshed while saving: it picks the attempt up from sessionStorage and says it is still saving.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+      await page.route(submitUrl, (route) =>
+        route.fulfill({ status: 503, json: { error: { code: "submission_pending" } } }),
+      );
+      await page.route(resumeUrl, () => {
+        // Never answered.
+      });
+    },
+    ready: async (page) => {
+      await toCodeSent(page);
+      await page.locator("#code").fill("123456");
+      await submitButton(page).click();
+      await expect(page.getByRole("status")).toBeVisible();
+      await page.reload();
+      await expect(page.getByRole("status")).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    },
+    allowText: formData,
+  },
+  {
+    id: "submission-needs-help",
+    description:
+      "An unresolved attempt: the reference and the configured contact instructions, and no button to send again.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+      await page.route(submitUrl, (route) =>
+        route.fulfill({ status: 503, json: { error: { code: "submission_pending" } } }),
+      );
+      await page.route(resumeUrl, (route) =>
+        route.fulfill({ status: 200, json: { status: "needs_help", reference: "A1B2-C3D4" } }),
+      );
+    },
+    ready: async (page) => {
+      await toCodeSent(page);
+      await page.locator("#code").fill("123456");
+      await submitButton(page).click();
+      await expect(page.getByText("A1B2-C3D4")).toBeVisible();
+      await expect(page.getByRole("button")).toHaveCount(0);
+    },
+    allowText: [...formData, "A1B2-C3D4"],
+  },
+  {
+    id: "submission-resumed-confirmation",
+    description:
+      "The tab refreshed while saving and the resume found the Report complete: the confirmation page.",
+    server: "seeded",
+    path: "/report",
+    prepare: async (page) => {
+      await freezeClock(page);
+      await mockCodeSent(page);
+      await page.route(submitUrl, (route) =>
+        route.fulfill({ status: 503, json: { error: { code: "submission_pending" } } }),
+      );
+      let asked = 0;
+      await page.route(resumeUrl, (route) =>
+        asked++ === 0
+          ? route.fulfill({ status: 200, json: { status: "saving" } })
+          : route.fulfill({
+              status: 200,
+              json: {
+                status: "complete",
+                number: 12,
+                title: typed.title,
+                statusUrl: "https://reports.example.hu/status/8s2Qn1vYt0xk7ZcLw3HfPA",
+              },
+            }),
+      );
+    },
+    ready: async (page) => {
+      await toCodeSent(page);
+      await page.locator("#code").fill("123456");
+      await submitButton(page).click();
+      await expect(page.getByRole("status")).toBeVisible();
+      await page.reload();
       await expect(page.getByRole("link", { name: /status/ })).toBeVisible();
     },
     allowText: [
