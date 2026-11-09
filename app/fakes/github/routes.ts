@@ -485,6 +485,18 @@ export class GitHubService {
       return paged(c.url, events);
     });
 
+    // The users an issue can be assigned to: here, the members who can triage (not the Bot).
+    r.add("GET", `${repoBase}/assignees`, (c) => {
+      this.#member(c);
+      const renderer = this.#renderer(c.url);
+      return paged(
+        c.url,
+        [...this.#store.staff.values()]
+          .filter((member) => roleRank(member.role) >= roleRank("triage"))
+          .map((member) => renderer.user(member.account)),
+      );
+    });
+
     // ---- labels
     r.add("GET", `${repoBase}/labels`, (c) => {
       this.#member(c);

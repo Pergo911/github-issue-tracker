@@ -477,3 +477,16 @@ describe("the timeline", () => {
     expect(page.headers.get("link")).toContain('rel="next"');
   });
 });
+
+describe("listing the assignable users", () => {
+  it("lists the members who can triage, readable by anyone in the repo, and not the Bot or a viewer", async () => {
+    const { client, read, outsider, path } = await setup();
+    const reply = await client.github("GET", path("/assignees"), { token: read });
+    expect(reply.status).toBe(200);
+    expect(reply.json.map((user: { login: string }) => user.login).sort()).toEqual([
+      "adam-admin",
+      "tamas-triage",
+    ]);
+    expect((await client.github("GET", path("/assignees"), { token: outsider })).status).toBe(404);
+  });
+});

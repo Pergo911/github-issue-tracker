@@ -52,6 +52,14 @@ export interface LabelSync {
   recoloured: string[];
 }
 
+/** What reveal-contact answers (SPEC 4.4). `allowlist` is `null` once the address is no longer listed. */
+export interface RevealedContact {
+  email: string;
+  /** The current Status link, or `null` if the Report has none. */
+  statusUrl: string | null;
+  allowlist: { note: string | null } | null;
+}
+
 /**
  * Every endpoint of the Worker. Add yours here; the Worker registers a handler for it and the SPA
  * calls it by this object, never by a hand-typed path.
@@ -225,6 +233,33 @@ export const endpoints = {
     response: type<StaffMeta>(),
     errors: {},
     role: "viewer",
+  }),
+
+  /**
+   * A Report's Reporter contact (SPEC 4.4): the email, the current Status link and, while the address is still on
+   * the Allowlist, its note. Maintenance staff and up, checked again here with the caller's own token. `not_found`
+   * for a Report that has no contact mapping.
+   */
+  revealContact: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/reveal-contact",
+    request: z.object({ issueNumber: z.int().positive() }),
+    response: type<RevealedContact>(),
+    errors: {},
+    role: "maintenance",
+  }),
+
+  /**
+   * The Staff Reissue of a Report's Status link (SPEC 4.3): the shared function, uncapped. The new link is
+   * emailed to the Reporter and never returned.
+   */
+  staffReissue: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/reissue",
+    request: z.object({ issueNumber: z.int().positive() }),
+    response: type<{ sent: true }>(),
+    errors: { reissue_mail_failed: 502, not_configured: 404 },
+    role: "maintenance",
   }),
 
   /** The Allowlist, newest first (SPEC 5). System admin only, like everything below. */

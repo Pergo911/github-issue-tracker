@@ -156,7 +156,14 @@ export function createStaffSession(deps: StaffSessionDeps) {
     return items;
   }
 
-  return { githubFetch, githubFetchAll, withToken };
+  /** One GitHub answer as JSON, or a `GitHubHttpError` for an error status. */
+  async function githubJson<T>(path: string, query?: Query): Promise<T> {
+    const response = await githubFetch(path, {}, query);
+    if (!response.ok) throw await failure(response);
+    return (await response.json()) as T;
+  }
+
+  return { githubFetch, githubFetchAll, githubJson, withToken };
 }
 
 export type StaffSession = ReturnType<typeof createStaffSession>;

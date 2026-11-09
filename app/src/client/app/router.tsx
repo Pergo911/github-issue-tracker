@@ -31,6 +31,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, loader: () => redirect("/staff/reports") },
           { path: "reports", lazy: () => import("../staff/reports/list-page.tsx") },
+          { path: "reports/:number", lazy: () => import("../staff/reports/detail-page.tsx") },
           { path: "allowlist", lazy: () => import("../staff/allowlist/allowlist-page.tsx") },
           {
             path: "configuration",
