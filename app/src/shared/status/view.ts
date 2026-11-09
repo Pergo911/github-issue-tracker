@@ -66,7 +66,7 @@ export type StatusView = z.infer<typeof statusViewSchema>;
 export type StatusTimelineItem = StatusView["timeline"][number];
 export type StatusBody = StatusView["body"];
 
-function closeReasonOf(reason: string | null | undefined): CloseReason {
+export function closeReasonOf(reason: string | null | undefined): CloseReason {
   if (reason === "not_planned") return "rejected";
   if (reason === "duplicate") return "duplicate";
   return "fixed";
@@ -169,7 +169,8 @@ function decodeReportBody(raw: string): { place: string | null; description: str
   return null;
 }
 
-function bodyOf(issue: GitHubIssue, bot: ExpectedBot): StatusBody {
+/** The Report's body decoded from its canonical envelopes, or as plain text when it is not canonical. */
+export function bodyOf(issue: GitHubIssue, bot: ExpectedBot): StatusBody {
   const raw = issue.body ?? "";
   const byBot =
     issue.user.login === bot.login && issue.user.id === bot.id && issue.user.type === "Bot";
@@ -179,23 +180,30 @@ function bodyOf(issue: GitHubIssue, bot: ExpectedBot): StatusBody {
   return { kind: "plain", text: raw.replace(MARKER_LINE, "").trimEnd() };
 }
 
-export function buildStatusView(input: {
-  issue: GitHubIssue;
-  /** The whole timeline, every page, in GitHub's order. */
-  timeline: readonly GitHubTimelineEvent[];
-  taxonomy: Taxonomy;
-  bot: ExpectedBot;
-}): StatusView {
-  const { issue, taxonomy, bot } = input;
-  const closed = issue.state === "closed";
+/** A timeline item with the GitHub event it came from, for a caller (the Staff Detail view) that also needs the actor. */
+export interface TimelineEntry {
+  item: StatusTimelineItem;
+  event: GitHubTimelineEvent;
+}
 
-  const timeline: StatusTimelineItem[] = [];
+/**
+ * The allowlisted progress history and comments (SPEC 4.3) in GitHub's order, each with its source event. The
+ * Status page drops the events; the Staff Detail view reads the commenter's login from them.
+ */
+export function timelineEntries(
+  events: readonly GitHubTimelineEvent[],
+  taxonomy: Taxonomy,
+  bot: ExpectedBot,
+): TimelineEntry[] {
+  const entries: TimelineEntry[] = [];
+  const add = (item: StatusTimelineItem, event: GitHubTimelineEvent) =>
+    entries.push({ item, event });
   let assignees = 0;
-  for (const event of input.timeline) {
+  for (const event of events) {
     switch (event.event) {
       case "commented": {
         const { author, text } = classifyComment(event, bot);
-        timeline.push({ kind: "comment", author, text, at: event.created_at });
+        add({ kind: "comment", author, text, at: event.created_at }, event);
         break;
       }
       case "labeled": {
@@ -207,33 +215,45 @@ export function buildStatusView(input: {
             parsed.dimension === "location") &&
           isConfigured(taxonomy, parsed.dimension, parsed.id)
         ) {
-          timeline.push({ kind: parsed.dimension, id: parsed.id, at: event.created_at });
+          add({ kind: parsed.dimension, id: parsed.id, at: event.created_at }, event);
         }
         break;
       }
       case "closed":
-        timeline.push({
-          kind: "closed",
-          reason: closeReasonOf(event.state_reason),
-          at: event.created_at,
-        });
+        add(
+          { kind: "closed", reason: closeReasonOf(event.state_reason), at: event.created_at },
+          event,
+        );
         break;
       case "reopened":
-        timeline.push({ kind: "reopened", at: event.created_at });
+        add({ kind: "reopened", at: event.created_at }, event);
         break;
       case "assigned":
         assignees += 1;
-        if (assignees === 1) timeline.push({ kind: "assigned", at: event.created_at });
+        if (assignees === 1) add({ kind: "assigned", at: event.created_at }, event);
         break;
       case "unassigned":
         assignees = Math.max(0, assignees - 1);
-        if (assignees === 0) timeline.push({ kind: "unassigned", at: event.created_at });
+        if (assignees === 0) add({ kind: "unassigned", at: event.created_at }, event);
         break;
       default:
         // `unlabeled`, `renamed` and anything GitHub adds later are not part of the allowlist.
         break;
     }
   }
+  return entries;
+}
+
+export function buildStatusView(input: {
+  issue: GitHubIssue;
+  /** The whole timeline, every page, in GitHub's order. */
+  timeline: readonly GitHubTimelineEvent[];
+  taxonomy: Taxonomy;
+  bot: ExpectedBot;
+}): StatusView {
+  const { issue, taxonomy, bot } = input;
+  const closed = issue.state === "closed";
+  const timeline = timelineEntries(input.timeline, taxonomy, bot).map((entry) => entry.item);
 
   return {
     number: issue.number,
