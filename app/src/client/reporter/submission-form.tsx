@@ -24,7 +24,8 @@ import {
 import { NeedsHelp, StillSaving } from "./recovery-states.tsx";
 
 /** How often the tab asks a still-saving submission how it stands, and one that needs a person. */
-const SAVING_POLL_MS = 3_000;
+// The resume endpoint allows 10 a minute per address (SPEC 4.5): never ask faster than that.
+const SAVING_POLL_MS = 7_000;
 const HELP_POLL_MS = 30_000;
 
 /** What the final submit's outcome left the tab showing instead of the form (SPEC 4.1, ADR 0005). */
@@ -117,6 +118,8 @@ export function Component() {
   );
   const formRef = useRef<HTMLFormElement>(null);
   const dispatched = useRef<{ email: string; credential: string } | null>(null);
+  // What the dispatch failed with when its outcome was unknown, shown if the server turns out never to have seen it.
+  const dispatchFailure = useRef<unknown>(null);
   const focusInvalid = useRef(0);
   const [now, refreshNow] = useNow(resendAt !== null);
   const secondsLeft = resendAt === null ? 0 : Math.max(0, Math.ceil((resendAt - now) / 1000));
@@ -168,10 +171,10 @@ export function Component() {
           // The server holds nothing for this credential (never reached, spent, or its link replaced).
           forgetCredential();
           setRecovery(null);
-          setFailure(error);
+          setFailure(dispatchFailure.current ?? error);
           return;
         }
-        next = Math.max(next, 5_000);
+        next = Math.max(next, 15_000);
       }
       timer = setTimeout(() => void poll(current), next);
     }
@@ -230,6 +233,7 @@ export function Component() {
     // Before the dispatch: if the answer is lost, a refresh of this tab resumes the same attempt.
     rememberPending(email);
     dispatched.current = { email, credential };
+    dispatchFailure.current = null;
     try {
       const report = await callApi(endpoints.submitReport, {
         email,
@@ -251,9 +255,14 @@ export function Component() {
         clearPending();
         setRecovery({ kind: "help", reference: error.reference ?? "", resumable: false });
       } else {
-        // Refused before anything was created: the attempt is over. An unknown outcome keeps its marker.
-        if (!(error instanceof ApiError) || !UNKNOWN_OUTCOME.includes(error.code)) clearPending();
-        if (error instanceof ApiError && isFieldError(error.code)) {
+        // Refused before anything was created: the attempt is over. An unknown outcome keeps its marker and
+        // goes straight to resuming: the answer may have been lost after the Report was created.
+        const unknown = error instanceof ApiError && UNKNOWN_OUTCOME.includes(error.code);
+        if (!unknown) clearPending();
+        if (unknown) {
+          dispatchFailure.current = error;
+          setRecovery({ kind: "saving" });
+        } else if (error instanceof ApiError && isFieldError(error.code)) {
           reject({ [fieldOfError[error.code]]: error.code });
         } else if (error instanceof ApiError && error.code === "invalid_code") {
           reject({ code: "invalid_code" });

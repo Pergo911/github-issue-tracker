@@ -37,6 +37,20 @@ const allowlist = defineEndpoint({
   errors: {},
 });
 
+const failCreate = defineEndpoint({
+  method: "POST",
+  path: "/api/_dev/fail-create",
+  request: z.object({ email: z.string().min(3) }),
+  response: type<{ armed: true }>(),
+  errors: {},
+});
+
+/**
+ * Addresses whose next issue create fails before it reaches GitHub (the `/api/_dev/fail-create` route): a
+ * per-address fault, so parallel end-to-end tests never trip each other (a fake GitHub fault is global).
+ */
+export const injectedCreateFailures = new Set<string>();
+
 const whoami = defineEndpoint({
   method: "GET",
   path: "/api/_dev/whoami",
@@ -89,6 +103,12 @@ export function registerLocalWorld(app: Hono<{ Bindings: Env }>): void {
       JSON.stringify({ addedBy: "local-world", addedAt: new Date().toISOString() }),
     );
     return { key };
+  });
+
+  // Makes the next create for one address fail before GitHub: the attempt is left for recovery (ticket #24).
+  registerEndpoint(app, failCreate, ({ input }) => {
+    injectedCreateFailures.add(input.email.trim().toLowerCase());
+    return { armed: true } as const;
   });
 
   registerEndpoint(app, whoami, ({ caller }) => ({ role: caller.role, login: caller.login }));
