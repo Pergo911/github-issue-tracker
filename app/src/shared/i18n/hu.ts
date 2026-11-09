@@ -160,6 +160,18 @@ export const hu = {
   "form.changeAddress": "Másik cím használata",
   "form.submit": "Bejelentés beküldése",
   "form.submitting": "A bejelentés beküldése…",
+  "saving.title": "A bejelentés mentése még folyamatban van",
+  "saving.description":
+    "A bejelentését megkaptuk, a mentése folyamatban van. Ez eltarthat egy ideig, az oldal magától frissül.",
+  "saving.refresh":
+    "Az oldalt nyugodtan frissítheti, ott folytatja, ahol abbahagyta. Ne küldje be újra a bejelentést.",
+  "help.title": "A bejelentés befejezéséhez ember segítsége kell",
+  "help.description":
+    "Nem tudtuk megerősíteni, hogy a bejelentése elmentődött. Biztonságosan megőrizzük.",
+  "help.reference": "Az Ön azonosítója",
+  "help.contact": "Ezt az azonosítót adja meg nekik",
+  "help.noResend":
+    "Ne küldje be újra a bejelentést, mert kétszer jöhetne létre. A fent megadott személyek befejezik vagy lemondják.",
   "confirmation.title": "A bejelentését megkaptuk",
   "confirmation.number": "Bejelentés sorszáma",
   "confirmation.reportTitle": "Cím",
