@@ -96,9 +96,14 @@ export function FilterBar({
   taxonomy,
   assignees,
   refreshing,
+  scan,
   onChange,
   onRefresh,
+  onCheckReporter,
 }: {
+  /** The Reporter-comment scan: not run yet, running, failed or done (SPEC 2.4). */
+  scan: "unknown" | "loading" | "error" | "ready";
+  onCheckReporter: () => void;
   view: ListView;
   taxonomy: PublicConfig["taxonomy"];
   assignees: readonly string[];
@@ -110,7 +115,9 @@ export function FilterBar({
   const filtered =
     DIMENSIONS.some((key) => view[key] !== undefined) ||
     view.assignee !== undefined ||
-    view.untriaged === true;
+    view.untriaged === true ||
+    view.reporter === true ||
+    view.sort !== undefined;
 
   return (
     <div className="flex flex-col gap-3">
@@ -152,6 +159,29 @@ export function FilterBar({
         >
           {t("reports.filter.untriaged")}
         </button>
+        <button
+          type="button"
+          aria-pressed={view.reporter === true}
+          onClick={() => onChange({ reporter: view.reporter ? undefined : true })}
+          className={cn(chip, view.reporter && "border-accent-emphasis bg-accent-muted")}
+        >
+          {t("reports.filter.reporter")}
+        </button>
+        <label
+          className={cn(chip, view.sort !== undefined && "border-accent-emphasis bg-accent-muted")}
+        >
+          <span className="font-medium">{t("reports.sort.label")}</span>
+          <select
+            value={view.sort ?? ""}
+            onChange={(event) =>
+              onChange({ sort: event.target.value === "" ? undefined : event.target.value })
+            }
+            className="max-w-48 bg-transparent text-xs"
+          >
+            <option value="">{t("reports.sort.default")}</option>
+            <option value="reporter">{t("reports.sort.reporter")}</option>
+          </select>
+        </label>
         {filtered ? (
           <Button
             variant="ghost"
@@ -164,6 +194,8 @@ export function FilterBar({
                 status: undefined,
                 assignee: undefined,
                 untriaged: undefined,
+                reporter: undefined,
+                sort: undefined,
               })
             }
           >
@@ -172,6 +204,14 @@ export function FilterBar({
           </Button>
         ) : null}
       </div>
+      {scan === "unknown" ? (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {t("reports.reporter.unknown")}
+          <Button variant="secondary" size="sm" onClick={onCheckReporter}>
+            {t("reports.reporter.check")}
+          </Button>
+        </p>
+      ) : null}
     </div>
   );
 }

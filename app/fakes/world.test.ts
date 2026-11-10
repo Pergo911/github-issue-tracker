@@ -13,6 +13,24 @@ async function setup() {
   return { ...test, ...cast };
 }
 
+describe("addComment", () => {
+  it("adds a comment as the Bot, or as a named Staff user, to a seeded Report", async () => {
+    const { client, control, bot, path } = await setup();
+    const { number } = control.createReport({ title: "t" });
+    const mine = control.addComment(number, "from the bot");
+    control.addStaff({ login: "member", role: "triage" });
+    control.addComment(number, "from a member", "member");
+    const listed = await client.github("GET", path("/issues/comments"), { token: bot });
+    const authors = (listed.json as { id: number; user: { login: string } }[]).map(
+      (comment) => comment.user.login,
+    );
+    expect(authors).toHaveLength(2);
+    expect(authors[1]).toBe("member");
+    expect(mine.id).toBeGreaterThan(0);
+    expect(() => control.addComment(number, "x", "nobody")).toThrow(/Unknown comment author/);
+  });
+});
+
 describe("fault injection", () => {
   it("answers a chosen status once, and changes nothing", async () => {
     const { client, control, bot, path } = await setup();

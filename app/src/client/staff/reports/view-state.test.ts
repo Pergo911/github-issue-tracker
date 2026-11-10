@@ -65,3 +65,17 @@ describe("the List's view state in the URL", () => {
     expect(params.get("state")).toBe("closed");
   });
 });
+
+describe("the Board/List toggle and the Reporter-comment view in the URL", () => {
+  it("defaults to the List with no Reporter-comment chip or sort", () => {
+    expect(parse("").layout).toBeUndefined();
+    expect(parse("layout=board")).toMatchObject({ layout: "board" });
+    expect(parse("reporter=1&sort=reporter")).toMatchObject({ reporter: true, sort: "reporter" });
+    expect(parse("layout=wat&sort=wat")).toEqual({ state: "open", q: "" });
+  });
+
+  it("round-trips and leaves defaults out", () => {
+    const view = parse("layout=board&reporter=1&sort=reporter");
+    expect(listViewToParams(view).toString()).toBe("layout=board&reporter=1&sort=reporter");
+  });
+});

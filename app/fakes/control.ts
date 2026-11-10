@@ -92,6 +92,8 @@ export interface Control {
   /** Creates the Appendix A labels, one Staff user per role and a handful of Reports. Idempotent per reset. */
   seed(): { staff: StaffGrant[]; reports: number[] };
   createReport(spec: ReportSpec): { number: number; id: number };
+  /** Adds a comment to a Report as `author` (a Staff login), or as the Bot when none is given. */
+  addComment(number: number, body: string, author?: string): { id: number };
   /** Deletes a Report the way an admin does in the GitHub UI: it goes, its `deleted` webhook is sent. */
   deleteReport(number: number): void;
 
