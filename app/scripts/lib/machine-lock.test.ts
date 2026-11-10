@@ -1,10 +1,19 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { acquireMachineLock, machineLockPath } from "./machine-lock.ts";
+import { fork, type ChildProcess } from "node:child_process";
+import { on, once } from "node:events";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { acquireMachineLock, machineLockPath, type MachineLock } from "./machine-lock.ts";
 
 const made: string[] = [];
+const holders: MachineLock[] = [];
+
+async function hold(path: string): Promise<MachineLock> {
+  const lock = await acquireMachineLock({ path, task: "another verify" });
+  holders.push(lock);
+  return lock;
+}
 
 function scratch(): string {
   const directory = mkdtempSync(join(tmpdir(), "verify-lock-test-"));
@@ -22,6 +31,8 @@ function plantLock(path: string, pid: number, task = "npm run verify (#24 recove
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
+  for (const lock of holders.splice(0)) lock.release();
   for (const directory of made.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
@@ -33,6 +44,77 @@ describe("machineLockPath", () => {
 });
 
 describe("acquireMachineLock", () => {
+  it("admits only one competing process at a time after a holder is killed", async () => {
+    const path = machineLockPath(scratch());
+    const children: ChildProcess[] = [];
+    const start = () => {
+      const child = fork(new URL("./testing/machine-lock-holder.ts", import.meta.url), [path], {
+        execArgv: [],
+        stdio: ["ignore", "ignore", "inherit", "ipc"],
+      });
+      children.push(child);
+      const messages = on(child, "message");
+      return { child, next: async () => (await messages.next()).value?.[0] as unknown };
+    };
+    try {
+      const holder = start();
+      expect(await holder.next()).toBe("held");
+      const contenders = [start(), start(), start()];
+      expect(await Promise.all(contenders.map((contender) => contender.next()))).toEqual([
+        "waiting",
+        "waiting",
+        "waiting",
+      ]);
+      const killed = once(holder.child, "exit");
+      holder.child.kill("SIGKILL");
+      await killed;
+
+      while (contenders.length > 0) {
+        for (const contender of contenders) contender.child.send("retry");
+        const states = await Promise.all(contenders.map((contender) => contender.next()));
+        expect(states.filter((state) => state === "held")).toHaveLength(1);
+        expect(states.every((state) => state === "held" || state === "waiting")).toBe(true);
+        const [winner] = contenders.splice(states.indexOf("held"), 1);
+        if (!winner) throw new Error("No contender acquired the lock.");
+        const exited = once(winner.child, "exit");
+        winner.child.send("release");
+        await exited;
+      }
+    } finally {
+      await Promise.all(
+        children.map(async (child) => {
+          if (child.exitCode !== null || child.signalCode !== null) return;
+          const exited = once(child, "exit");
+          child.kill("SIGKILL");
+          await exited;
+        }),
+      );
+    }
+  });
+
+  it("never lets an old release remove a replacement holder's lock", async () => {
+    const path = machineLockPath(scratch());
+    const first = await acquireMachineLock({ path, task: "first" });
+    first.release();
+    const replacement = await acquireMachineLock({ path, task: "replacement" });
+    try {
+      first.release();
+      const contender = await acquireMachineLock({
+        path,
+        task: "contender",
+        wait: false,
+        report: () => {},
+      });
+      try {
+        expect(contender.held).toBe(false);
+      } finally {
+        contender.release();
+      }
+    } finally {
+      replacement.release();
+    }
+  });
+
   it("takes the lock, records the holder, and gives it back", async () => {
     const path = machineLockPath(scratch());
     const lock = await acquireMachineLock({ path, task: "the test" });
@@ -55,7 +137,6 @@ describe("acquireMachineLock", () => {
     const lock = await acquireMachineLock({
       path,
       task: "the next run",
-      alive: () => false,
       report: (message) => messages.push(message),
     });
 
@@ -66,44 +147,42 @@ describe("acquireMachineLock", () => {
 
   it("does not wait when told not to, and leaves the holder's lock alone", async () => {
     const path = machineLockPath(scratch());
-    plantLock(path, 4242);
+    await hold(path);
     const messages: string[] = [];
 
     const lock = await acquireMachineLock({
       path,
       task: "the impatient run",
       wait: false,
-      alive: () => true,
       report: (message) => messages.push(message),
     });
 
     expect(lock.held).toBe(false);
-    expect(messages.join("\n")).toMatch(/another verify is running .*pid 4242/);
+    expect(messages.join("\n")).toContain(`another verify is running (pid ${process.pid}`);
     expect(JSON.parse(readFileSync(join(path, "holder.json"), "utf8"))).toMatchObject({
-      pid: 4242,
+      task: "another verify",
     });
 
     lock.release();
     expect(JSON.parse(readFileSync(join(path, "holder.json"), "utf8"))).toMatchObject({
-      pid: 4242,
+      task: "another verify",
     });
   });
 
   it("waits for a live holder, then takes the lock once it is released", async () => {
     const path = machineLockPath(scratch());
-    plantLock(path, 4242);
+    const holder = await hold(path);
     const messages: string[] = [];
     let waited = 0;
 
     const lock = await acquireMachineLock({
       path,
       task: "the patient run",
-      alive: () => true,
       report: (message) => messages.push(message),
       // The other run finishes during the first pause.
       sleep: async () => {
         waited += 1;
-        rmSync(path, { recursive: true, force: true });
+        holder.release();
       },
     });
 
@@ -114,27 +193,30 @@ describe("acquireMachineLock", () => {
     lock.release();
   });
 
-  it("says so once and runs beside a holder it has waited too long for", async () => {
+  it("keeps waiting beyond thirty minutes until the holder releases", async () => {
     const path = machineLockPath(scratch());
-    plantLock(path, 4242);
+    const holder = await hold(path);
     const messages: string[] = [];
 
+    let now = 0;
+    let waited = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     const lock = await acquireMachineLock({
       path,
       task: "the tired run",
-      alive: () => true,
-      timeoutMs: 0,
       report: (message) => messages.push(message),
-      sleep: async () => {},
+      sleep: async () => {
+        waited += 1;
+        now += 31 * 60_000;
+        if (waited === 2) holder.release();
+      },
     });
 
-    expect(lock.held).toBe(false);
+    expect(lock.held).toBe(true);
+    expect(waited).toBe(2);
     expect(messages.join("\n")).toMatch(/waiting for another verify/);
-    expect(messages.join("\n")).toMatch(/running anyway/);
+    expect(messages.join("\n")).not.toMatch(/running anyway/);
     lock.release();
-    expect(JSON.parse(readFileSync(join(path, "holder.json"), "utf8"))).toMatchObject({
-      pid: 4242,
-    });
   });
 
   it("takes over a directory whose holder file never appeared", async () => {
@@ -144,12 +226,36 @@ describe("acquireMachineLock", () => {
     const lock = await acquireMachineLock({
       path,
       task: "the recovering run",
-      alive: () => true,
       report: () => {},
       sleep: async () => {},
     });
 
     expect(lock.held).toBe(true);
     lock.release();
+  });
+
+  it("does not reclaim a live lock just because its advisory holder file is missing", async () => {
+    const path = machineLockPath(scratch());
+    await hold(path);
+    rmSync(join(path, "holder.json"));
+
+    const contender = await acquireMachineLock({
+      path,
+      task: "contender",
+      wait: false,
+      report: () => {},
+      sleep: async () => {},
+    });
+    try {
+      expect(contender.held).toBe(false);
+    } finally {
+      contender.release();
+    }
+  });
+
+  it("fails rather than running unlocked when the lock cannot be opened", async () => {
+    const path = machineLockPath(scratch());
+    writeFileSync(path, "not a lock directory");
+    await expect(acquireMachineLock({ path, task: "the run" })).rejects.toThrow();
   });
 });
