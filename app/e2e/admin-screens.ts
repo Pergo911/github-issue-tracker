@@ -6,14 +6,13 @@ import { staffData } from "./staff-screens.ts";
 import { worldOf } from "./support/test.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { staffToken, startSignedIn } from "./support/staff.ts";
+import { SLOW } from "./support/timings.ts";
 
 // The Allowlist and Configuration screens of ticket #30, declared for screenshots, reference images, axe and the
 // pseudo-language sweep (see the note at the top of screens.ts). The Allowlist's data is faked with `page.route`
 // so every run looks the same and the shared seeded server's list is not touched; the Configuration screens read the
 // seeded server's real configuration (nothing here saves a valid one). Sign-in, the role gate and the validation
 // answer come from the real Worker.
-
-const SLOW = { timeout: 30_000 };
 
 /** Every string of the reference configuration that is wording the Organization wrote, not the catalog's. */
 function textOf(config: unknown): AllowedText[] {

@@ -2,6 +2,7 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import type { AsyncControl } from "../fakes/control.ts";
 import { buildReporterComment } from "../src/shared/reports/attribution.ts";
 import { controlUrl, urlFor } from "./support/servers.ts";
+import { waitForMails } from "./support/mail.ts";
 import { expect, test } from "./support/test.ts";
 
 // The Status page against the real dev server and the local world (ticket #25, SPEC 4.3): a Report is really
@@ -17,13 +18,6 @@ interface Filed {
   token: string;
   email: string;
   ip: string;
-}
-
-async function waitForMail(world: AsyncControl, email: string, count: number) {
-  await expect
-    .poll(async () => (await world.outbox(email)).length, { timeout: 15_000 })
-    .toBeGreaterThanOrEqual(count);
-  return world.outbox(email);
 }
 
 /** Files a Report through the Worker's two public endpoints and returns its Status token. */
@@ -43,7 +37,7 @@ async function fileReport(
   expect(
     (await request.post(urlFor("seeded", "/api/reports/code"), { data: { email }, headers })).ok(),
   ).toBe(true);
-  const code = /\b(\d{6})\b/.exec((await waitForMail(world, email, 1)).at(-1)?.text ?? "")?.[1];
+  const code = /\b(\d{6})\b/.exec((await waitForMails(world, email, 1)).at(-1)?.text ?? "")?.[1];
   const filed = await request.post(urlFor("seeded", "/api/reports/submit"), {
     headers,
     data: {
@@ -93,7 +87,7 @@ test.describe("the Status page", () => {
     world,
   }) => {
     const filed = await fileReport(request, world, page);
-    const confirmation = (await waitForMail(world, filed.email, 2)).find((mail) =>
+    const confirmation = (await waitForMails(world, filed.email, 2)).find((mail) =>
       mail.subject.startsWith(`Bejelentés #${filed.number}`),
     );
     const link = /https?:\/\/\S+\/status\/[A-Za-z0-9_-]{22}/.exec(confirmation?.text ?? "")?.[0];
@@ -190,7 +184,7 @@ test.describe("the Status page", () => {
     world,
   }) => {
     const filed = await fileReport(request, world, page);
-    await waitForMail(world, filed.email, 2);
+    await waitForMails(world, filed.email, 2);
     await open(page, filed.token);
     await page.locator("#reissue-heading ~ div button").click();
     const dialog = page.getByRole("dialog");
@@ -203,7 +197,7 @@ test.describe("the Status page", () => {
     // The page never shows the new link: only the Reporter's mailbox does
     await expect(page.locator("body")).not.toContainText("/status/");
 
-    const mail = (await waitForMail(world, filed.email, 3)).at(-1);
+    const mail = (await waitForMails(world, filed.email, 3)).at(-1);
     const fresh = /\/status\/([A-Za-z0-9_-]{22})/.exec(mail?.text ?? "")?.[1] as string;
     expect(fresh).not.toBe(filed.token);
 
@@ -247,7 +241,7 @@ test.describe("the Status page", () => {
       await page.locator("#reissue-heading ~ div button").click();
       await page.getByRole("dialog").getByRole("button").last().click();
       await expect(page.getByRole("status")).toBeVisible();
-      const mail = (await waitForMail(world, filed.email, 2 + round)).at(-1);
+      const mail = (await waitForMails(world, filed.email, 2 + round)).at(-1);
       token = /\/status\/([A-Za-z0-9_-]{22})/.exec(mail?.text ?? "")?.[1] as string;
     }
     await open(page, token);

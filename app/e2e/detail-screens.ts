@@ -7,6 +7,7 @@ import type { Screen } from "./screens.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { respond, staffToken, startSignedIn } from "./support/staff.ts";
 import { worldOf } from "./support/test.ts";
+import { SLOW } from "./support/timings.ts";
 
 // The Staff Detail view screens of ticket #28, declared for screenshots, reference images, axe and the
 // pseudo-language sweep (see the note at the top of screens.ts). Sign-in and the role check go through the real
@@ -149,7 +150,6 @@ function signedIn(role: "viewer" | "maintenance", fixture?: Fixture) {
 }
 
 const path = `/staff/reports/${NUMBER}`;
-const SLOW = { timeout: 30_000 };
 const shown = async (page: Page) => {
   await expect(page.locator("#history-heading")).toBeVisible(SLOW);
 };

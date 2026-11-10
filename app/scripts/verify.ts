@@ -5,20 +5,29 @@
 //   npm run verify -- --fast              typecheck, lint, format, unit, worker, tooling: no browser, no Docker
 //   npm run verify -- --only lint,test:unit
 //   npm run verify -- --skip test:visual  (VERIFY_SKIP=test:visual does the same, for a machine without Docker)
-//   VERIFY_JOBS=2 npm run verify          fewer steps at once, when the machine is busy (default 5)
+//   VERIFY_JOBS=2 npm run verify          fewer steps at once (default: half the processors, at most 4)
+//   VERIFY_NO_WAIT=1 npm run verify       run beside another verify instead of queueing behind it
 //
+// One verify per machine at a time: the run takes a lock (scripts/lib/machine-lock.ts) and waits while another
+// worktree's verify holds it, because two at once is what made recorded runs take 800s and turn into false reds.
 // Each step's full output goes to .tmp/verify-<time>/<step>.log; a failed step prints its tail here.
+import { cpus } from "node:os";
 import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { machineJobLimit } from "./lib/jobs.ts";
+import { acquireMachineLock } from "./lib/machine-lock.ts";
+import { runQueue } from "./lib/schedule.ts";
 import { APP_ROOT } from "./lib/state.ts";
 
 interface Step {
   name: string;
   /** What it checks, for the summary. */
   covers: string;
-  /** In the --fast subset: needs no browser and no Docker. */
+  /** In the `--fast` subset: needs no browser and no Docker. */
   fast: boolean;
+  /** Steps that share a group never run at the same time: they compete for the same memory. */
+  group?: string;
 }
 
 // Slowest first, so the parallel stage overlaps them with the quick ones.
@@ -32,11 +41,13 @@ const STEPS: Step[] = [
     name: "test:visual",
     covers: "reference screenshots, rendered in Playwright's Docker image",
     fast: false,
+    group: "browser",
   },
   {
     name: "test:e2e",
     covers: "journeys, axe, pseudo-language sweep, in the real dev server",
     fast: false,
+    group: "browser",
   },
   {
     name: "test:tooling",
@@ -64,8 +75,8 @@ const STEPS: Step[] = [
 
 /** Steps that must not overlap with each other: both build into .tsbuild/, so typecheck goes first, alone. */
 const FIRST = "typecheck";
-/** Steps run at once. `VERIFY_JOBS=2` is kinder on a machine that other agents share (timeouts are load, not bugs). */
-const PARALLEL = Math.max(1, Number(process.env["VERIFY_JOBS"]) || 5);
+/** Steps run at once: as many as the machine carries, and never two browser suites together (see `group`). */
+const PARALLEL = machineJobLimit();
 
 function option(name: string): string[] {
   const index = process.argv.indexOf(`--${name}`);
@@ -132,18 +143,29 @@ async function runAll(): Promise<Outcome[]> {
   const first = toRun.find((step) => step.name === FIRST);
   if (first) outcomes.push(await runStep(first));
   const queue = toRun.filter((step) => step !== first);
-  await Promise.all(
-    Array.from({ length: PARALLEL }, async () => {
-      for (let step = queue.shift(); step; step = queue.shift()) {
-        outcomes.push(await runStep(step));
-      }
-    }),
-  );
+  await runQueue(queue, PARALLEL, async (step) => {
+    outcomes.push(await runStep(step));
+  });
   return outcomes;
 }
 
+console.log(
+  `verify: ${toRun.length} steps, up to ${PARALLEL} at a time on ${cpus().length} processors.`,
+);
+
+const lock = await acquireMachineLock({
+  task: `npm run verify in ${APP_ROOT}`,
+  wait: process.env["VERIFY_NO_WAIT"] !== "1",
+});
+
 const started = Date.now();
-const outcomes = await runAll();
+const outcomes = await (async () => {
+  try {
+    return await runAll();
+  } finally {
+    lock.release();
+  }
+})();
 const failed = outcomes.filter((outcome) => !outcome.ok);
 
 for (const outcome of failed) {

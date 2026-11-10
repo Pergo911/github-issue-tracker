@@ -1,3 +1,4 @@
+import { codeFromMailbox } from "./support/mail.ts";
 import { controlUrl, urlFor } from "./support/servers.ts";
 import { expect, test } from "./support/test.ts";
 import type { AsyncControl } from "../fakes/control.ts";
@@ -42,16 +43,6 @@ async function fill(page: Page, email: string, title = "Elakadt a lift e2e") {
   await page.locator("#place").fill("B lépcsőház");
 }
 
-async function codeFromOutbox(world: AsyncControl, email: string): Promise<string> {
-  await expect
-    .poll(async () => (await world.outbox(email)).length, { timeout: 15_000 })
-    .toBeGreaterThan(0);
-  const mails = await world.outbox(email);
-  const code = /\b(\d{6})\b/.exec(mails.at(-1)?.text ?? "")?.[1];
-  expect(code).toBeTruthy();
-  return code as string;
-}
-
 test.describe("the Submission form", () => {
   test("a listed Reporter files a Report, and the Bot's issue and the confirmation email are right", async ({
     page,
@@ -64,7 +55,7 @@ test.describe("the Submission form", () => {
     await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
     await expect(page.locator("#code")).toBeVisible();
     // The credential is kept in sessionStorage before the final dispatch
-    const code = await codeFromOutbox(world, email);
+    const code = await codeFromMailbox(world, email);
     await page.locator("#code").fill(code);
     await page.locator("form button[type=submit]").click();
 
@@ -133,7 +124,7 @@ test.describe("the Submission form", () => {
     const email = await newReporter(page, request, world, { listed: true });
     await fill(page, email);
     await page.locator("form button[type=submit]").click();
-    const code = await codeFromOutbox(world, email);
+    const code = await codeFromMailbox(world, email);
     const wrong = code === "000000" ? "000001" : "000000";
     for (let guess = 0; guess < 5; guess++) {
       await page.locator("#code").fill(wrong);

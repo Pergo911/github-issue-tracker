@@ -3,6 +3,7 @@ import { referenceConfig } from "../src/shared/seed/reference-config.ts";
 import type { Screen } from "./screens.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { serveReports, staffToken, startSignedIn, type IssueFixture } from "./support/staff.ts";
+import { SLOW } from "./support/timings.ts";
 
 // The Staff screens of ticket #27, declared for screenshots, reference images, axe and the pseudo-language sweep
 // (see the note at the top of screens.ts). Sign-in, the device flow's Worker proxy and the role check go through
@@ -100,9 +101,6 @@ const deviceCode = {
 
 const issuesUrl = /\/repos\/[^/]+\/[^/]+\/issues\?/;
 
-// The first visit to /staff makes the dev server transform the whole staff chunk: on a busy machine (verify runs
-// the visual and end-to-end steps together) that takes longer than Playwright's default 10 s.
-const SLOW = { timeout: 30_000 };
 const headingShown = async (page: Page) => {
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible(SLOW);
 };

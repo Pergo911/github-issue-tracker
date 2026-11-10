@@ -27,8 +27,9 @@ export async function axeViolations(page: Page): Promise<string[]> {
 export async function expectAccessible(page: Page): Promise<void> {
   for (const scheme of COLOR_SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(null))));
-    // Colours transition when the scheme changes: measure contrast once they have settled.
+    // Switching the scheme retargets every `transition-colors` (see ui/button.tsx), so the page spends ~150ms
+    // between the two palettes and axe would sample a colour that is in neither. Wait for them to settle (the
+    // filter keeps a loading screen's spinner from holding the wait open), then a frame.
     await page.evaluate(() =>
       Promise.all(
         document
@@ -37,6 +38,7 @@ export async function expectAccessible(page: Page): Promise<void> {
           .map((a) => a.finished.catch(() => null)),
       ),
     );
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(null))));
     expect(await axeViolations(page), `axe violations in ${scheme} mode`).toEqual([]);
   }
 }
