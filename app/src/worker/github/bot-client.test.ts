@@ -105,7 +105,8 @@ describe("the Bot client", () => {
       const other = createBotClient({ ...env, BOT_APP_ID: "999" }, { fetch: fetcher });
       await expect(other.request("GET", other.repoPath())).rejects.toMatchObject({
         name: "GitHubApiError",
-        status: 401,
+        // Live GitHub answers a JWT issued for another App id 404 "Integration not found" (ticket #32).
+        status: 404,
       });
       expect(exchanges(calls)).toBe(1);
     });

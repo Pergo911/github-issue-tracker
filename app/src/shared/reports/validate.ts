@@ -9,8 +9,11 @@ export const MAX_TITLE = 80;
 export const MAX_DESCRIPTION = 4000;
 export const MAX_PLACE = 100;
 
-/** Unicode letters, combining marks, numbers, the ordinary space and `. , ! ? ( ) ' " - – — ‘ ’ “ ”`. */
-export const TITLE_ALPHABET = /^[\p{L}\p{M}\p{N} .,!?()'"\-–—‘’“”]*$/u;
+/**
+ * Unicode letters, combining marks, numbers, the ordinary space and `. , ! ? ( ) ' " - – — ‘ ’ “ ” „ ‚ » « …`.
+ * The last five are Hungarian typography; live GitHub renders every one as plain text (SPEC 4.1, ticket #32).
+ */
+export const TITLE_ALPHABET = /^[\p{L}\p{M}\p{N} .,!?()'"\-–—‘’“”„‚»«…]*$/u;
 
 export const FIELD_ERRORS = [
   "title_length",

@@ -107,6 +107,11 @@ describe("validating the form fields", () => {
       "It's “fine”, isn't it?",
       "Lift 2-es!",
       "‘x’ — y.",
+      // Hungarian quotation marks and the ellipsis: live GitHub renders them as plain text (ticket #32).
+      "Hiba „idézet” után",
+      "Hiba ‚idézet’ után",
+      "Hiba »idézet« után",
+      "Várjuk… sokáig",
     ]) {
       expect(error({ title: good }), good).toBeNull();
     }
