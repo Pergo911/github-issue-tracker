@@ -160,8 +160,12 @@ export const staffScreens: Screen[] = [
     prepare: deviceFlow({ status: "expired" }),
     ready: async (page) => {
       await page.getByRole("button").click();
-      await expect(page.getByRole("button")).toBeVisible();
+      // The flow shows the waiting card (with the code) for one poll interval before the answer says expired.
+      // Wait for the code to appear *and* go: asserting only its absence was true before the first answer, so a
+      // loaded runner could screenshot the waiting card instead of this one (CI failed here twice).
+      await expect(page.getByText(deviceCode.userCode)).toBeVisible();
       await expect(page.getByText(deviceCode.userCode)).toHaveCount(0);
+      await expect(page.getByRole("button")).toBeVisible();
       await headingShown(page);
     },
     allowText: staffData,
