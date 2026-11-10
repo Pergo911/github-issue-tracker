@@ -1,6 +1,6 @@
 // The one committed Wrangler configuration: one Deployment unit (SPEC 2.6, ADR 0001). No `env` blocks.
 // Whoever deploys a different Deployment edits the `vars` and creates their own resources.
-// Ticket #20 (the human) supplies the real reference-Deployment values marked REPLACE_*.
+// Reference Deployment: https://fault-reports.berautoapp.workers.dev (setup ticket #20).
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "fault-reports",
@@ -16,13 +16,15 @@
 
   // Non-secret deploy-time values (SPEC 2.6). Never shown on a screen (SPEC 2.4).
   "vars": {
-    "GITHUB_ORG": "REPLACE_GITHUB_ORGANIZATION",
+    "GITHUB_ORG": "Tarsashaz-demo",
     "GITHUB_REPO": "reports",
     "RESEND_FROM_DOMAIN": "mail.berautoapp.hu",
-    "APP_URL": "https://REPLACE_WORKERS_DEV_ADDRESS",
-    "BOT_APP_ID": "REPLACE_BOT_APP_ID",
-    "BOT_INSTALLATION_ID": "REPLACE_BOT_INSTALLATION_ID",
-    "STAFF_APP_CLIENT_ID": "REPLACE_STAFF_APP_CLIENT_ID",
+    "APP_URL": "https://fault-reports.berautoapp.workers.dev",
+    "BOT_APP_ID": "5692641",
+    "BOT_INSTALLATION_ID": "180437384",
+    "BOT_USER_ID": "354771587",
+    "BOT_LOGIN": "tarsashaz-demo-reports-bot[bot]",
+    "STAFF_APP_CLIENT_ID": "Iv23liY5Xu3W4hIZGJ74",
     // The services the Worker talks to, as base URLs. These are the real ones; the local world (`vite dev`) and
     // the Worker tests point them at the fake GitHub and the fake Resend instead (ticket #22).
     "GITHUB_API_BASE": "https://api.github.com",
@@ -38,7 +40,7 @@
 
   // Workers KV: write-once or read-mostly state (SPEC 5). Created by hand; paste the id of your namespace.
   // The id is not used by local dev, which keeps its KV inside .wrangler/ in this worktree.
-  "kv_namespaces": [{ "binding": "KV", "id": "REPLACE_KV_NAMESPACE_ID" }],
+  "kv_namespaces": [{ "binding": "KV", "id": "abf33a49cdf14e2987966b7561b7439d" }],
 
   // The three gates (SPEC 4.5, 5, ADR 0003): SQLite-backed Durable Objects, one class each.
   "durable_objects": {

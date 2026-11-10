@@ -19,27 +19,6 @@ GitHub's blocking links show which are ready. Each ticket is done when it meets 
 
 Run everything from `app/`, with npm. `package.json` has the full script list; these are the ones to reach for:
 
-| Command | What it checks | Run it |
-| --- | --- | --- |
-| `npm run verify` | **all of the below**, red on any failure (about 4 minutes on an idle machine) | before you call a ticket done |
-| `npm run doctor` | this machine's processors, free memory and busiest processes, and what to run here | first, when a suite is slower or redder than it should be |
-| `VERIFY_JOBS=2 npm run verify` | the same with two steps at a time | when the run has to share the machine |
-| `npm run verify -- --fast` | typecheck, lint, format, unit, worker, tooling: no browser, no Docker | while you work |
-| `npm run typecheck` | `wrangler types`, then `tsc -b` over client, worker, shared, tests, tooling | after type-level changes |
-| `npm run lint` · `npm run format` | ESLint (`format:check` is Prettier's check) | before committing |
-| `npm run test:unit` | Vitest in Node: `shared/`, client logic, the fakes (`fakes/`), lint rules, catalog completeness (about 3 s) | on every `shared/` or client-logic change |
-| `npm run test:worker` | Vitest in the local Workers runtime, against the fake GitHub and Resend: KV, Durable Objects, rate limits | on every Worker change |
-| `npm run test:tooling` | compile-time boundaries, seed and reset, chunk check | after touching tsconfig, scripts or the build |
-| `npm run test:contract` | the contract suite against the fake only (it also runs inside `test:unit`) | after changing a fake |
-| `npm run test:contract:live` | the same scenarios against the fake **and** the live `reports-sandbox` repo with the real Bot | after changing a fake or anything that depends on GitHub's behaviour; see below |
-| `npm run check:titles` · `npm run capture:webhooks` | the live title-alphabet check · re-record the real webhook payloads | when GitHub's behaviour may have changed |
-| `npm run test:e2e` | Playwright against the real dev server: journeys, axe, pseudo-language sweep | after UI or API changes |
-| `npm run screenshots` | every declared screen, light and dark, 1280 and 375 px, Hungarian, in your local browser | for every screen you add or change |
-| `npm run test:visual` | the same screens against `e2e/reference/*.png`, rendered in Playwright's Docker image | in `verify`; run it alone after UI changes |
-| `npm run test:visual:update` | rewrites the reference images | only after you opened the diffs and each change is intended |
-| `npm run dev` · `npm run seed` · `npm run reset` | the dev server (it hosts the fake GitHub and Resend) · Appendix A configuration into local KV · clear all local state | seed once per worktree before `dev` |
-| `npm run recovery -- <list\|inspect\|associate\|discard> ...` | the operator CLI for submissions that need a person (`docs/runbook-submission-recovery.md`) | against a deployed Worker with your own GitHub token; the e2e tests run it against the dev server |
-| `npm run world -- <method> [arg ...]` | drives the running local world: seed Reports and Staff users, approve a device code, read the outbox, inject faults | with `npm run dev` running; see below |
 
 `npm run setup` installs the Chromium that `test:e2e` and `screenshots` use. `npm run test:visual` needs Docker
 running. Extra arguments reach Playwright: `npm run test:e2e -- -g "home page"`. Run Playwright through these
@@ -174,7 +153,7 @@ A difference found is fixed in the fake or the code, with a test; `SPEC.md` §6 
 - **Hygiene:** every issue a run creates is closed as `not_planned`, every label it creates is deleted, and titles
   carry a per-run tag, so re-running is safe. `capture:webhooks` creates a repo webhook, rewrites
   `fakes/testing/fixtures/github-webhooks/` and deletes the hook; the receiver's tests run against those files.
-  `check:titles` creates about a hundred sandbox issues (closed again) and exits non-zero if an *allowed* title
+  `check:titles` creates about a hundred sandbox issues (closed again) and exits non-zero if an _allowed_ title
   ever renders as anything but plain text.
 
 ### Parallel runs
@@ -273,6 +252,11 @@ Invariants to preserve:
   history.
 
 ## Planning status
+
+The reference Deployment is live at <https://fault-reports.berautoapp.workers.dev>, using
+`Tarsashaz-demo/reports`. For deploying, upgrading secrets/webhooks, running the live acceptance check,
+or packaging the live Windows app, read [`docs/runbook-deployment.md`](./docs/runbook-deployment.md).
+The live-check script creates and erases one temporary Report; use `--cleanup` after an interruption.
 
 The wayfinder map ([Map: close SPEC §7 open items](https://github.com/Pergo911/github-issue-tracker/issues/1)) is complete;
 `SPEC.md` §7 records the decisions. Remaining validation (notably the title alphabet) belongs to implementation,

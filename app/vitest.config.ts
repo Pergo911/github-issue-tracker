@@ -75,6 +75,8 @@ export default defineConfig({
                 GITHUB_REPO: TEST_REPO,
                 BOT_APP_ID: String(TEST_BOT.appId),
                 BOT_INSTALLATION_ID: String(TEST_BOT.installationId),
+                BOT_USER_ID: "",
+                BOT_LOGIN: "",
                 STAFF_APP_CLIENT_ID: TEST_STAFF_CLIENT_ID,
                 RESEND_FROM_DOMAIN: "mail.test",
                 APP_URL: "https://reports.test",

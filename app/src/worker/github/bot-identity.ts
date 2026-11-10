@@ -11,7 +11,17 @@ import { createBotClient, type BotClientEnv } from "./bot-client.ts";
 const CACHE_MS = 10 * 60_000;
 let cached: { key: string; expiresAt: number; identity: StaffMeta["bot"] } | null = null;
 
-export async function resolveBotIdentity(env: BotClientEnv): Promise<StaffMeta["bot"]> {
+export async function resolveBotIdentity(
+  env: BotClientEnv & { BOT_USER_ID?: string; BOT_LOGIN?: string },
+): Promise<StaffMeta["bot"]> {
+  // Live Deployments pin the verified identity; the local world discovers its throwaway Bot instead.
+  if (env.BOT_USER_ID && env.BOT_LOGIN) {
+    const id = Number(env.BOT_USER_ID);
+    if (!Number.isSafeInteger(id) || id <= 0 || !env.BOT_LOGIN.endsWith("[bot]")) {
+      throw new Error("Invalid pinned Bot identity");
+    }
+    return { id, login: env.BOT_LOGIN, type: "Bot" };
+  }
   const key = `${env.GITHUB_API_BASE}|${env.BOT_APP_ID}`;
   if (cached && cached.key === key && cached.expiresAt > Date.now()) return cached.identity;
 
