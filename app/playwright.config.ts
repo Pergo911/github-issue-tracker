@@ -22,7 +22,10 @@ const server = (kind: ServerKind) => ({
   // The SPA's index page, not an /api/ path: the empty server answers 404 there on purpose.
   url: `http://127.0.0.1:${serverPort(kind)}/`,
   reuseExistingServer: false,
-  timeout: 120_000,
+  // A cold Vite server scans and then bundles the app's dependencies before it answers. On a loaded machine that
+  // took over 120s and failed the run with "Timed out waiting 120000ms from config.webServer" (#25), which reads
+  // as a broken app. This is a start-up budget, not a place to hide a slow assertion.
+  timeout: 240_000,
   stdout: "pipe" as const,
   stderr: "pipe" as const,
   env: {
