@@ -127,7 +127,9 @@ try {
   const listed = (listing.json as { guid: string; event: string; action: string | null }[]).map(
     (summary) => ({
       ...summary,
-      id: new RegExp(String.raw`"id":(\d+),"guid":"${summary.guid}"`).exec(listing.text)?.[1] as string,
+      id: new RegExp(String.raw`"id":(\d+),"guid":"${summary.guid}"`).exec(
+        listing.text,
+      )?.[1] as string,
     }),
   );
   rmSync(OUT, { recursive: true, force: true });

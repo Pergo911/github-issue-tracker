@@ -717,17 +717,34 @@ the gated screen (§4.4), and every extra PII field is one more thing to keep ou
 
 **Titles use validation, not an encoding wrapper.** After the existing trim/newline normalization, the initial
 allowlist is Unicode letters, combining marks and numbers; ordinary space (`U+0020`); and punctuation
-`. , ! ? ( ) ' " - – — ‘ ’ “ ”`. Reject other characters with a catalog error; do not silently strip/replace them.
+punctuation `. , ! ? ( ) ' " - – — ‘ ’ “ ” „ ‚ » « …` (the last five are Hungarian typography, added on the
+live evidence below). Reject other characters with a catalog error; do not silently strip/replace them.
 Accepted titles are stored unchanged and rendered as plain text in the SPA and emails. They are not fenced.
 Backticks, Markdown delimiters, `@`, `#`, angle brackets, colons, slashes, emoji and control characters are outside
 this allowlist. The 3–80-character limit remains.
 
-**Accepted implementation risk:** the live spike proved neither arbitrary raw titles nor the tested inline-code
-wrapper literal, and did **not** validate this restricted alphabet. The human chose to finish planning without
-another title spike. During implementation, test actual title rendering/round-trips and possible auto-links
-(including domain-like and hexadecimal text), then adjust the allowlist explicitly if needed. Do not claim
-verified title inertness, silently allow unrestricted raw titles, or replace Reporter titles with generated ones.
-This is implementation validation of the chosen policy, not an open design decision.
+**Live validation** ([ticket #32](https://github.com/Pergo911/github-issue-tracker/issues/32), 2026-11-10,
+`reports-sandbox`, the real Bot; the full table is in
+[`docs/evidence/title-alphabet-live-check.md`](./docs/evidence/title-alphabet-live-check.md), repeatable with
+`npm run check:titles`). 111 candidate titles were created as issue titles, read back raw (REST) and rendered
+(GraphQL `titleHTML`), and their timelines were searched for `mentioned` and `cross-referenced` events:
+
+- All 62 titles the validator then allowed (Hungarian letters and accents, digits, every allowed mark, domain-like
+  text such as `example.hu` and `www.example.com`, hexadecimal and SHA-like strings of 7 to 40 characters, plain
+  numbers, `GH-1`, bare user names, other scripts, combining marks) came back byte for byte, rendered as plain text
+  (no tag in `titleHTML`), and raised no timeline event.
+- GitHub renders a title far more inertly than a body: `@mentions`, `#` references, URLs, e-mail addresses,
+  Markdown emphasis, links, HTML and `&amp;` all stayed plain text even as probes. Only two things change the
+  rendering: a backtick pair becomes `<code>` and a `:shortcode:` becomes an emoji, and both are outside the
+  allowlist (backtick and colon).
+- The Hungarian opening quotation mark `„` was missing from the original allowlist while its closer `”` was
+  there. `„ ‚ » « …` all rendered as plain text and were added. `/ & + % ; : = * _ ~ | [ ] { } $ ^ § €` also
+  rendered as plain text; they stay out because `:` is not safe and the rest would widen a policy this ticket was
+  not asked to widen. Widening it is a product decision, with this evidence in hand.
+
+What this does **not** show: how GitHub's notification e-mails, mobile app or other integrations render a title,
+and nothing about GitHub changing its rendering later. `npm run check:titles` exits non-zero if an allowed title
+ever misbehaves. The title is still never fenced and never replaced by a generated one.
 
 **The issue body is a fixed template with fenced free text.** Its captions (Category / Location /
 Exact place / Description) come from the code catalog for the configured language (§2.5) — the template's
@@ -762,6 +779,9 @@ case. Instead:
      `issue-email`, `issue-token` and `status-token` (§4.1, §5), then stops. `transferred` is unsupported and ignored.
    - The event's `sender` is the Bot. GitHub fires one `labeled` per label when an issue is created with labels,
      so the bot's own creation-time events (and its reporter comments) would otherwise look like a status change.
+   - A `closed` delivery whose `issue` is open, or a `reopened` one whose `issue` is closed: GitHub renders the
+     `issue` when it sends the delivery, so the Report changed again in between, and the later delivery says
+     what happened (§6, live findings).
    - A status entered while the Report is closed: a stale label, since closed is GitHub's state (§2.3).
    - Entering the `initial` status. The dashboard applies it right after `reopened`, so a reopen sends one
      email, not two.
@@ -850,7 +870,7 @@ The [live installation-token spike](https://github.com/Pergo911/github-issue-tra
 validated raw round-trips, actual fenced rendering, attribution and mention/reference controls for the tested
 body/comment corpus. Raw Bot mentions **did** notify. Fenced mention/reference suppression is bounded evidence
 from that run, not a guarantee of permanent email non-delivery or suppression of ordinary subscriber notifications.
-Titles have the separate, not-yet-live-validated input policy in §4.1.
+Titles have the separate input policy in §4.1, validated live in ticket #32.
 
 **Reporter comments** (requirement from the instructor): a reporter can add comments to their own
 report from the status page.
@@ -1134,6 +1154,40 @@ notifications on major changes, without granting them the broad repo visibility 
 - **Rate limits** are 5,000 requests/hour per authenticated user, which is ample at building scale. The one
   risk is that all anonymous submissions share the bot token's bucket (§3.3).
 
+### Live contract findings
+
+[Ticket #32](https://github.com/Pergo911/github-issue-tracker/issues/32) ran one contract suite against the fake
+and against `reports-sandbox` with the real Bot (`npm run test:contract:live`, see AGENTS.md). Where they differed,
+the fake was taught live's behaviour, or the code was changed with a test. What live GitHub does, as measured:
+
+- **Bot credentials.** An installation token is `ghs_` followed by a long JWT-like string (it contains dots), not a
+  short opaque one. Its own `permissions` are `{issues: write, metadata: read}`, and the repo's `permissions`
+  object shows it **all false**: the rights are in the token, so the role check (§2.4) is for Staff tokens only.
+  JWT failures are mostly a bare `401 Bad credentials`; an unknown App id is `404 Integration not found`.
+- **Labels.** An unknown label in an issue create or PATCH **is created** (colour `ededed`, no description). An
+  issue's labels come back sorted by name. Labels can be created, recoloured, renamed and deleted by the Bot.
+- **Identity.** The Bot's issues and comments have `user.type: "Bot"`, login `<slug>[bot]` and one numeric id.
+  `performed_via_github_app` is **null on the issue** and the full App on every **comment**, so attribution keys on
+  user type, id and login (§4.3), with the App as a conflict check only.
+- **Close and reopen.** A single PATCH closes or reopens and swaps the labels; the issue's `state_reason` is
+  `completed`, `not_planned`, `duplicate` or `reopened`. A `closed` timeline event carries `null` for the default
+  `completed` reason. `duplicate_issue_id` takes the original's database id (not its number) and puts a
+  `marked_as_duplicate` event on the original. A bad reason or id is 422.
+- **Timeline.** `labeled` and `unlabeled` carry `label: {name, color}`; `assigned` the assignee; `renamed`
+  `rename: {from, to}`. A fenced Reporter text raised no `mentioned` event; the same text unfenced did.
+- **Webhooks.** A repo webhook's payload has `organization` and no `installation`, and its `issue` has no
+  `closed_by`. **GitHub renders a delivery's `issue` when it sends it, not when the event happened**: a `closed`
+  followed within a second by a reopen arrives as a `closed` delivery showing an open issue. The receiver therefore
+  drops a `closed` for an open issue and a `reopened` for a closed one (`stale-state`, §4.2); the later delivery
+  carries the change. Delivery order is not chronological. The fake still renders the issue at event time.
+- **Device flow.** An unknown client id is `404 {"error":"Not Found"}` from both endpoints. A wrong or missing
+  grant type, and a refresh token GitHub never issued, answer `incorrect_client_credentials` (HTTP 200), not
+  `unsupported_grant_type` or `bad_refresh_token`; the Worker treats it as `refresh_rejected`. Polling twice at
+  once answers `slow_down` with `interval: 10`. Refresh of a *valid* token without `client_secret` (decision 13)
+  was not re-run here: it needs an approved device code, which only a person can give.
+- **Not settled.** Whether a Triage user may set labels in a PATCH (the fake's `triageCanLabel`, default true):
+  the sandbox has no Triage account, so it remains the documented assumption until one exists.
+
 ---
 
 ## 7. Decision register
@@ -1258,6 +1312,7 @@ relevant design sections; they are not claims that the application already exist
     The human accepted title-alphabet validation/adjustment during implementation rather than another spike;
     the live evidence proves the tested body/comment properties, not the title policy
     ([Status views, neutralization and failure paths](https://github.com/Pergo911/github-issue-tracker/issues/18)).
+    The title policy was then validated live and its allowlist adjusted (§4.1, ticket #32).
 
 ---
 

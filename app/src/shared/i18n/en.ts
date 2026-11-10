@@ -244,7 +244,7 @@ export const en = {
     "The link was replaced, but the email with the new one could not be sent. Ask the maintenance staff for the new link.",
   "api.error.title_length": "The title must be 3 to 80 characters.",
   "api.error.title_characters":
-    "The title may contain only letters, numbers, spaces and these marks: . , ! ? ( ) ' \" - – — ‘ ’ “ ”",
+    "The title may contain only letters, numbers, spaces and these marks: . , ! ? ( ) ' \" - – — ‘ ’ “ ” „ ‚ » « …",
   "api.error.description_length": "The description must be 1 to 4,000 characters.",
   "api.error.place_length": "The exact place can be at most 100 characters.",
   "api.error.unknown_category": "Choose a category from the list.",

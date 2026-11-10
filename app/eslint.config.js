@@ -67,7 +67,15 @@ export default defineConfig([
   },
   // Tests assert on loosely typed JSON on purpose.
   {
-    files: ["**/*.test.ts", "e2e/**/*.ts", "fakes/testing/**/*.ts"],
+    files: [
+      "**/*.test.ts",
+      "e2e/**/*.ts",
+      "fakes/testing/**/*.ts",
+      // The live checks read GitHub's JSON as it comes.
+      "fakes/node/contract/**/*.ts",
+      "scripts/capture-webhooks.ts",
+      "scripts/check-titles.ts",
+    ],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-assignment": "off",

@@ -242,7 +242,7 @@ export const hu = {
     "A hivatkozás megszűnt, de az új hivatkozást tartalmazó levelet nem sikerült elküldeni. Kérje az új hivatkozást a karbantartóktól.",
   "api.error.title_length": "A címnek 3 és 80 karakter közöttinek kell lennie.",
   "api.error.title_characters":
-    "A cím csak betűket, számokat, szóközöket és ezeket a jeleket tartalmazhatja: . , ! ? ( ) ' \" - – — ‘ ’ “ ”",
+    "A cím csak betűket, számokat, szóközöket és ezeket a jeleket tartalmazhatja: . , ! ? ( ) ' \" - – — ‘ ’ “ ” „ ‚ » « …",
   "api.error.description_length": "A leírásnak 1 és 4000 karakter közöttinek kell lennie.",
   "api.error.place_length": "A pontos hely legfeljebb 100 karakter lehet.",
   "api.error.unknown_category": "Válasszon kategóriát a listából.",

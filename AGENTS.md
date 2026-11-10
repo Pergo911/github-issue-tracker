@@ -29,6 +29,9 @@ Run everything from `app/`, with npm. `package.json` has the full script list; t
 | `npm run test:unit` | Vitest in Node: `shared/`, client logic, the fakes (`fakes/`), lint rules, catalog completeness (about 3 s) | on every `shared/` or client-logic change |
 | `npm run test:worker` | Vitest in the local Workers runtime, against the fake GitHub and Resend: KV, Durable Objects, rate limits | on every Worker change |
 | `npm run test:tooling` | compile-time boundaries, seed and reset, chunk check | after touching tsconfig, scripts or the build |
+| `npm run test:contract` | the contract suite against the fake only (it also runs inside `test:unit`) | after changing a fake |
+| `npm run test:contract:live` | the same scenarios against the fake **and** the live `reports-sandbox` repo with the real Bot | after changing a fake or anything that depends on GitHub's behaviour; see below |
+| `npm run check:titles` · `npm run capture:webhooks` | the live title-alphabet check · re-record the real webhook payloads | when GitHub's behaviour may have changed |
 | `npm run test:e2e` | Playwright against the real dev server: journeys, axe, pseudo-language sweep | after UI or API changes |
 | `npm run screenshots` | every declared screen, light and dark, 1280 and 375 px, Hungarian, in your local browser | for every screen you add or change |
 | `npm run test:visual` | the same screens against `e2e/reference/*.png`, rendered in Playwright's Docker image | in `verify`; run it alone after UI changes |
@@ -127,8 +130,8 @@ fakes keep their state in memory: a dev-server restart is a reset.
   checking, installation tokens, device flow (every outcome scriptable), signed `issues` webhooks with switches for
   duplicate and out-of-order delivery, CORS, and faults (timeout, 5xx, "created, but the response was lost"). The
   fakes are stricter than GitHub in one way on purpose: they require `User-Agent` and `X-GitHub-Api-Version: 2022-11-28`
-  (the one constant in `shared/github/constants.ts`). Where live GitHub is unconfirmed (unknown labels, whether Triage
-  may set labels in a PATCH) a `configure` switch picks the behaviour; ticket #32 settles them.
+  (the one constant in `shared/github/constants.ts`). Live GitHub creates an unknown label (settled by ticket #32); whether Triage
+  may set labels in a PATCH is still unconfirmed (no Triage account in the sandbox), so `triageCanLabel` stays a `configure` switch.
 - **Worker tests** (`test:worker`) get the same world in the Workers isolate: `fakeWorld()`, `fakeClient()` and
   `addToAllowlist(email)` from `src/worker/testing/world.ts`, reset before every test (`setup.ts`). The fakes answer the
   Worker's outbound `fetch` at `https://world.test`; any other outbound request fails the test.
@@ -146,6 +149,26 @@ fakes keep their state in memory: a dev-server restart is a reset.
 - **The Bot key.** Without `BOT_APP_PRIVATE_KEY` in `.dev.vars` or the environment, the dev server generates a throwaway
   key for the fake App. `src/worker/github/app-jwt.ts` accepts GitHub's PKCS#1 PEM as downloaded and PKCS#8, so
   `wrangler secret put BOT_APP_PRIVATE_KEY < app.pem` works unchanged.
+
+### The live contract suite
+
+`fakes/node/contract/` runs one set of scenarios (`github.contract.test.ts`) against the fake and, on request,
+against the real GitHub with the real Bot, so the fake cannot drift from what it imitates. It never touches the
+`reports` repo: the live target is hard-wired to `reports-sandbox`, and a request naming another repo throws.
+A difference found is fixed in the fake or the code, with a test; `SPEC.md` §6 lists what live GitHub does.
+
+- **Run it:** `npm run test:contract:live` (about 90 s). Without `CONTRACT_LIVE=1` the live half skips with its
+  reason, so `verify` never needs credentials or the network.
+- **Credentials** are read from the secrets folder, `%USERPROFILE%\.config\github-issue-tracker-deployment\`
+  (`REPORTS_DEPLOYMENT_DIR` moves it): `bot-private-key.pem` and `live.env` with the non-secret values
+  `GITHUB_ORG`, `BOT_APP_ID`, `BOT_INSTALLATION_ID` and `STAFF_APP_CLIENT_ID` (ticket #20 records them). The
+  operator's own token, for the repo `permissions` and for webhooks, comes from `GITHUB_TOKEN`, `GH_TOKEN` or
+  `gh auth token`. Anything missing skips the live half and says what.
+- **Hygiene:** every issue a run creates is closed as `not_planned`, every label it creates is deleted, and titles
+  carry a per-run tag, so re-running is safe. `capture:webhooks` creates a repo webhook, rewrites
+  `fakes/testing/fixtures/github-webhooks/` and deletes the hook; the receiver's tests run against those files.
+  `check:titles` creates about a hundred sandbox issues (closed again) and exits non-zero if an *allowed* title
+  ever renders as anything but plain text.
 
 ### Parallel runs
 
