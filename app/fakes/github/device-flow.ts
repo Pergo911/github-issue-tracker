@@ -54,6 +54,13 @@ function userCode(): string {
   return `${Array.from({ length: 4 }, pick).join("")}-${Array.from({ length: 4 }, pick).join("")}`;
 }
 
+const INCORRECT_CLIENT_CREDENTIALS: DeviceFlowError = {
+  error: "incorrect_client_credentials",
+  error_description: "The client_id and/or client_secret passed are incorrect.",
+  error_uri:
+    "https://docs.github.com/apps/managing-oauth-apps/troubleshooting-oauth-app-access-token-request-errors/#incorrect-client-credentials",
+};
+
 /**
  * GitHub's web endpoints for device flow (SPEC 2.2): code, token and refresh. Errors are HTTP 200 with a JSON
  * `error` body, as GitHub sends them, and the answer is form-encoded unless the caller sent
@@ -81,15 +88,12 @@ export class DeviceFlow {
 
   // ---------------------------------------------------------------------------- the web endpoints
 
-  requestCode(params: Record<string, unknown>): DeviceCodeResponse | DeviceFlowError {
-    if (params["client_id"] !== this.#clientId()) {
-      return {
-        error: "incorrect_client_credentials",
-        error_description: "The client_id and/or client_secret passed are incorrect.",
-        error_uri:
-          "https://docs.github.com/apps/managing-oauth-apps/troubleshooting-oauth-app-access-token-request-errors/#incorrect-client-credentials",
-      };
-    }
+  /** GitHub answers an unknown client id with a plain 404, before it looks at anything else. */
+  knows(params: Record<string, unknown>): boolean {
+    return params["client_id"] === this.#clientId();
+  }
+
+  requestCode(_params: Record<string, unknown>): DeviceCodeResponse | DeviceFlowError {
     const now = this.#clock.now();
     const record: CodeRecord = {
       deviceCode: randomHex(40),
@@ -114,20 +118,10 @@ export class DeviceFlow {
   }
 
   token(params: Record<string, unknown>): DeviceTokenResponse | DeviceFlowError {
-    if (params["client_id"] !== this.#clientId()) {
-      return {
-        error: "incorrect_client_credentials",
-        error_description: "The client_id and/or client_secret passed are incorrect.",
-      };
-    }
     const grant = params["grant_type"];
     if (grant === "refresh_token") return this.#refresh(params);
-    if (grant !== DEVICE_CODE_GRANT) {
-      return {
-        error: "unsupported_grant_type",
-        error_description: "The grant type must be urn:ietf:params:oauth:grant-type:device_code.",
-      };
-    }
+    // Observed live: any other grant type, or none, is treated as the web flow and fails for want of a secret.
+    if (grant !== DEVICE_CODE_GRANT) return INCORRECT_CLIENT_CREDENTIALS;
     const record = this.#codes.get(text(params["device_code"]));
     if (!record || record.consumed) {
       return {
@@ -179,10 +173,16 @@ export class DeviceFlow {
   #refresh(params: Record<string, unknown>): DeviceTokenResponse | DeviceFlowError {
     const pair = this.#tokens.refresh(text(params["refresh_token"]));
     if (!pair) {
-      return {
-        error: "bad_refresh_token",
-        error_description: "The refresh token passed is incorrect or expired.",
-      };
+      // Observed live: a refresh token GitHub never issued is "incorrect client credentials" (the web flow's
+      // answer: there is no secret to go with it). `bad_refresh_token` is the documented answer for one that was
+      // issued and is dead; the fake gives it for a token it already exchanged.
+      if (this.#tokens.wasSpent(text(params["refresh_token"]))) {
+        return {
+          error: "bad_refresh_token",
+          error_description: "The refresh token passed is incorrect or expired.",
+        };
+      }
+      return INCORRECT_CLIENT_CREDENTIALS;
     }
     return {
       access_token: pair.accessToken,

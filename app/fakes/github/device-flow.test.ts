@@ -53,13 +53,13 @@ describe("requesting a code", () => {
     expect(reply.json.user_code).toBeTruthy();
   });
 
-  it("refuses another client id, with an error inside a 200 as GitHub does", async () => {
+  it("answers another client id with a 404, as GitHub does (measured live, ticket #32)", async () => {
     const { client } = await start();
     const reply = await client.web("POST", "/login/device/code", {
       form: { client_id: "someone-else" },
     });
-    expect(reply.status).toBe(200);
-    expect(reply.json.error).toBe("incorrect_client_credentials");
+    expect(reply.status).toBe(404);
+    expect(reply.json).toEqual({ error: "Not Found" });
   });
 });
 
@@ -93,7 +93,8 @@ describe("polling", () => {
     const wrong = await client.web("POST", "/login/oauth/access_token", {
       form: { client_id: TEST_STAFF_CLIENT_ID, device_code: "x", grant_type: "password" },
     });
-    expect(wrong.json.error).toBe("unsupported_grant_type");
+    // GitHub treats any other grant as the web flow, which fails for want of a client secret.
+    expect(wrong.json.error).toBe("incorrect_client_credentials");
   });
 
   it("answers slow_down, with the new interval, when polled faster than the interval", async () => {
@@ -190,8 +191,8 @@ describe("tokens and refresh", () => {
     expect((await refresh(tokens.refresh_token)).json.error).toBe("bad_refresh_token");
   });
 
-  it("refuses a refresh token it never issued", async () => {
+  it("refuses a refresh token it never issued as incorrect client credentials, as GitHub does", async () => {
     const { refresh } = await signedIn();
-    expect((await refresh("ghr_nope")).json.error).toBe("bad_refresh_token");
+    expect((await refresh("ghr_nope")).json.error).toBe("incorrect_client_credentials");
   });
 });

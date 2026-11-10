@@ -113,8 +113,13 @@ export function registerStaff(app: Hono<{ Bindings: Env }>): void {
     );
     if (!answer) return fail("upstream_unavailable");
     if ("error" in answer) {
+      // GitHub says `bad_refresh_token` for a token it issued and that is dead, and (measured live, ticket #32)
+      // `incorrect_client_credentials` for one it never issued. Either way the member signs in again, which
+      // reports a genuinely wrong client id itself (the device-code request answers 404).
       return fail(
-        answer.error === "bad_refresh_token" ? "refresh_rejected" : "upstream_unavailable",
+        answer.error === "bad_refresh_token" || answer.error === "incorrect_client_credentials"
+          ? "refresh_rejected"
+          : "upstream_unavailable",
       );
     }
     const tokens = tokensOf(answer);

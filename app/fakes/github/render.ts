@@ -104,10 +104,13 @@ export class Renderer {
       author_association: authorRole === "none" ? "NONE" : "MEMBER",
       performed_via_github_app: null,
       user: this.#userByLogin(record.author),
-      labels: record.labels.flatMap((name) => {
-        const label = this.#store.label(name);
-        return label ? [this.label(label)] : [];
-      }),
+      // GitHub lists an issue's labels sorted by name, whatever order they were added in.
+      labels: [...record.labels]
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .flatMap((name) => {
+          const label = this.#store.label(name);
+          return label ? [this.label(label)] : [];
+        }),
       assignee: assignees[0] ?? null,
       assignees,
       closed_by: record.closedBy === null ? null : this.#userByLogin(record.closedBy),
@@ -138,8 +141,27 @@ export class Renderer {
       updated_at: isoSeconds(record.updatedAt),
       author_association:
         (this.#store.actorForLogin(record.author)?.role ?? "none") === "none" ? "NONE" : "MEMBER",
-      performed_via_github_app: null,
+      performed_via_github_app: record.author === this.#store.botAccount.login ? this.app() : null,
     };
+  }
+
+  /** The Bot's App as GitHub names it on the comments the Bot posts (and not on the issues). */
+  app() {
+    const { org, bot } = this.#store.options;
+    return {
+      id: bot.appId,
+      slug: bot.slug,
+      node_id: `A_fake_${bot.appId}`,
+      owner: this.user(this.#store.orgAccount),
+      name: bot.slug,
+      description: "",
+      external_url: `${REAL_WEB}/organizations/${org}`,
+      html_url: `${REAL_WEB}/apps/${bot.slug}`,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      permissions: { issues: "write", metadata: "read" },
+      events: [],
+    } as unknown as NonNullable<GitHubComment["performed_via_github_app"]>;
   }
 
   timelineEvent(record: TimelineRecord): GitHubTimelineEvent | null {
@@ -179,6 +201,8 @@ export class Renderer {
           commit_url: null,
           assignee: this.#userByLogin(record.assignee),
         };
+      case "marked_as_duplicate":
+        return { ...base, event: "marked_as_duplicate", commit_id: null, commit_url: null };
       case "renamed":
         return {
           ...base,
@@ -195,7 +219,6 @@ export class Renderer {
           ...this.comment(comment),
           event: "commented",
           actor: this.#userByLogin(comment.author),
-          performed_via_github_app: null,
         };
       }
     }

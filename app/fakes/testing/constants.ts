@@ -14,3 +14,6 @@ export const TEST_BOT = {
   slug: "fault-reports-bot",
   installationId: 777001,
 } as const;
+
+/** The secret the recorded real deliveries under `fixtures/github-webhooks/` are signed with. */
+export const FIXTURE_WEBHOOK_SECRET = "contract-fixture-secret";

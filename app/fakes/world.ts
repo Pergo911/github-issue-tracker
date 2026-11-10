@@ -77,7 +77,7 @@ export function createWorld(options: WorldOptions): World {
     {
       org: options.org,
       repo: options.repo,
-      bot: { slug: options.bot.slug, accountId: botAccountId },
+      bot: { slug: options.bot.slug, accountId: botAccountId, appId: options.bot.appId },
     },
     clock,
   );
@@ -220,9 +220,16 @@ export function createWorld(options: WorldOptions): World {
     if (request.method !== "POST") return new Response("Not Found", { status: 404 });
     const params = await readFormOrJson(request);
     if (params === "invalid") return new Response("Bad Request", { status: 400 });
+    if (path !== "/login/device/code" && path !== "/login/oauth/access_token") {
+      return new Response("Not Found", { status: 404 });
+    }
+    if (!device.knows(params)) {
+      return wantsJson
+        ? jsonResponse({ error: "Not Found" }, 404)
+        : new Response("Not Found", { status: 404 });
+    }
     if (path === "/login/device/code") return respond({ ...device.requestCode(params) });
-    if (path === "/login/oauth/access_token") return respond({ ...device.token(params) });
-    return new Response("Not Found", { status: 404 });
+    return respond({ ...device.token(params) });
   }
 
   // ----------------------------------------------------------------------------------- the control

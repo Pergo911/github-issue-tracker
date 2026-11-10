@@ -8,7 +8,8 @@ import { closeReasonOf, type CloseReason } from "../status/view.ts";
  * Pure and runtime-neutral: the Worker supplies the Bot's identity and acts on the answer.
  */
 
-export type IgnoreReason = "transferred" | "bot" | "stale-status" | "initial" | "no-major-change";
+export type IgnoreReason =
+  "transferred" | "bot" | "stale-state" | "stale-status" | "initial" | "no-major-change";
 
 export type Classification =
   /** The Report was deleted on GitHub: erase what the system holds about its Reporter. */
@@ -34,6 +35,16 @@ export function classifyIssuesEvent(
   const { sender } = payload;
   if (sender.type === "Bot" && sender.login === bot.login && sender.id === bot.id) {
     return { kind: "ignore", why: "bot" };
+  }
+
+  // GitHub renders a delivery's `issue` when it sends it, not when the event happened (measured live, ticket
+  // #32): a `closed` for an issue that was reopened a moment later arrives showing an open issue. The later
+  // `reopened` delivery carries the change the Reporter should hear about, so the stale one sends nothing.
+  if (payload.action === "closed" && payload.issue.state !== "closed") {
+    return { kind: "ignore", why: "stale-state" };
+  }
+  if (payload.action === "reopened" && payload.issue.state !== "open") {
+    return { kind: "ignore", why: "stale-state" };
   }
 
   switch (payload.action) {

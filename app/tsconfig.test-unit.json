@@ -13,6 +13,7 @@
     }
   },
   "include": [
+    "fakes/testing/fixtures/**/*.json",
     "src/shared/**/*.test.ts",
     "fakes/**/*.test.ts",
     "src/client/**/*.test.ts",
