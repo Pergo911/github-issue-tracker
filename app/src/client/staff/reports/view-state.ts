@@ -15,6 +15,15 @@ const listViewSchema = z.object({
     .transform(() => true as const)
     .optional()
     .catch(undefined),
+  /** Board or List; the List is the default and is left out of the URL. */
+  layout: z.enum(["board", "list"]).catch("list"),
+  /** The "has Reporter comments" chip. */
+  reporter: z
+    .literal("1")
+    .transform(() => true as const)
+    .optional()
+    .catch(undefined),
+  sort: z.enum(["reporter"]).optional().catch(undefined),
   /** Free-text search (GitHub's search API); empty means no search. */
   q: z.string().max(256).catch(""),
 });
@@ -28,6 +37,9 @@ export interface ListView {
   status?: string;
   assignee?: string;
   untriaged?: true;
+  layout?: "board";
+  reporter?: true;
+  sort?: "reporter";
   q: string;
 }
 
@@ -39,6 +51,9 @@ export function parseListView(params: URLSearchParams): ListView {
     if (value !== undefined) view[key] = value;
   }
   if (parsed.untriaged) view.untriaged = true;
+  if (parsed.layout === "board") view.layout = "board";
+  if (parsed.reporter) view.reporter = true;
+  if (parsed.sort) view.sort = parsed.sort;
   return view;
 }
 
@@ -53,6 +68,9 @@ export function listViewToParams(view: ListView, rest?: URLSearchParams): URLSea
     "status",
     "assignee",
     "untriaged",
+    "layout",
+    "reporter",
+    "sort",
     "q",
   ]);
   for (const [key, value] of rest ?? []) {
@@ -64,6 +82,9 @@ export function listViewToParams(view: ListView, rest?: URLSearchParams): URLSea
     if (value !== undefined) params.set(key, value);
   }
   if (view.untriaged) params.set("untriaged", "1");
+  if (view.layout === "board") params.set("layout", "board");
+  if (view.reporter) params.set("reporter", "1");
+  if (view.sort) params.set("sort", view.sort);
   if (view.q !== "") params.set("q", view.q);
   return params;
 }
