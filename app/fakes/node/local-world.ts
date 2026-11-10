@@ -117,6 +117,8 @@ export async function planLocalWorld(
       GITHUB_REPO: LOCAL_REPO,
       BOT_APP_ID: String(LOCAL_BOT.appId),
       BOT_INSTALLATION_ID: String(LOCAL_BOT.installationId),
+      BOT_USER_ID: "",
+      BOT_LOGIN: "",
       STAFF_APP_CLIENT_ID: LOCAL_STAFF_CLIENT_ID,
       // Switches on the dev-only smoke routes (src/worker/dev/): they do not exist in production.
       LOCAL_WORLD: "1",

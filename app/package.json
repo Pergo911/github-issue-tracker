@@ -29,6 +29,8 @@
     "reset": "node scripts/reset.ts",
     "world": "node scripts/world.ts",
     "recovery": "node scripts/recovery.ts",
+    "deploy:reference": "node scripts/deploy-reference.ts",
+    "check:live": "node scripts/live-check.ts",
     "screenshots": "node scripts/screenshots.ts",
     "test:visual": "node scripts/visual.ts",
     "test:visual:update": "node scripts/visual.ts --update",

@@ -169,12 +169,12 @@ Deployment configures the **values** (see [`GLOSSARY.md`](./GLOSSARY.md), "Class
 **Fixed by the system.** Four dimensions, each a label prefix. Their existence, cardinality and who sets them are
 system semantics. A Deployment can't add a fifth dimension or drop one.
 
-| Dimension  | Set by                                                                        | Values per Report                  | Notes                                                                                   |
-| ---------- | ----------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
-| `category` | Reporter on the form; Staff may correct it (a label swap, link-only, no email) | exactly one                        |                                                                                         |
-| `location` | Reporter on the form                                                          | exactly one                        | Plus an optional free-text "exact place" in the issue body.                             |
-| `priority` | Staff only                                                                    | zero or one                        | No value means untriaged. The values are ordered, so the dashboard can sort by them.    |
-| `status`   | The system: the bot on creation, the dashboard on transitions                 | exactly one on supported open-Report writes | The dashboard swaps the label in one call; manual edits can violate this (§2.4). |
+| Dimension  | Set by                                                                         | Values per Report                           | Notes                                                                                |
+| ---------- | ------------------------------------------------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `category` | Reporter on the form; Staff may correct it (a label swap, link-only, no email) | exactly one                                 |                                                                                      |
+| `location` | Reporter on the form                                                           | exactly one                                 | Plus an optional free-text "exact place" in the issue body.                          |
+| `priority` | Staff only                                                                     | zero or one                                 | No value means untriaged. The values are ordered, so the dashboard can sort by them. |
+| `status`   | The system: the bot on creation, the dashboard on transitions                  | exactly one on supported open-Report writes | The dashboard swaps the label in one call; manual edits can violate this (§2.4).     |
 
 Reporters get no urgency control. The form shows a per-Deployment **emergency notice** instead (for example, who
 to call for fire, gas or flooding).
@@ -222,11 +222,11 @@ re-checks the role with the caller's token, so the tiers are enforced server-sid
 **Three tiers, from the repo `permissions` object.** GitHub's five repo roles collapse to three dashboard roles,
 because Write and Maintain add only code access the dashboard never uses (issue actions top out at Triage):
 
-| Dashboard role    | Repo role(s)      | Gets                                                                         |
-| ----------------- | ----------------- | ---------------------------------------------------------------------------- |
-| Viewer            | Read              | the views and commenting; every action control hidden; never reveal-contact (§4.4) |
-| Maintenance staff | Triage or better  | everything on Reports: labels, assignee, close/reopen, comments, reissue, reveal-contact |
-| System admin      | Admin             | Maintenance staff plus the Allowlist and Configuration screens              |
+| Dashboard role    | Repo role(s)     | Gets                                                                                     |
+| ----------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| Viewer            | Read             | the views and commenting; every action control hidden; never reveal-contact (§4.4)       |
+| Maintenance staff | Triage or better | everything on Reports: labels, assignee, close/reopen, comments, reissue, reveal-contact |
+| System admin      | Admin            | Maintenance staff plus the Allowlist and Configuration screens                           |
 
 A Viewer can comment but cannot label, assign or close anyone's Report — the Bot opened them all, so "close your
 own" never applies.
@@ -333,7 +333,7 @@ Two kinds of strings, two homes:
   page's 404 and closed-Report notice, the comment box, reissue confirmations, the dashboard's screens and
   close-reason words — and the issue-body template's captions (§4.1). The SPA and the Worker import the same
   catalog module from `shared/`, but the Worker reads from it only the body captions the Bot writes into GitHub
-   (§4.1) and the close-reason words that fill the Closed template's reason placeholder (§4.6): API
+  (§4.1) and the close-reason words that fill the Closed template's reason placeholder (§4.6): API
   errors and status data travel as stable codes and structured fields (an error code; a comment's
   `author: "reporter" | "staff"` with the canonical envelope already decoded) and the SPA localizes them.
   Adding a language is a code contribution; a Deployment configures one of the shipped languages and
@@ -631,11 +631,11 @@ sense some readers assume that word means.
      avoid trivially enumerating valid addresses.
    - If listed: the Worker asks that email's Durable Object (§4.5) to issue a code: a 6-digit OTP from a CSPRNG,
      stored as hash + expiry and sent via Resend. The cooldown and the per-email caps are enforced there.
-    - The response is identical whether the address is unlisted, was sent a code, is cooling down or is capped, and
-      the per-email Durable Object call and the send run in `waitUntil`, so the listed and unlisted paths return
-      alike. The one exception is the Deployment-wide code budget (§4.5): its single global gate is awaited on
-      every OTP request, before the Allowlist read, so its 429 never depends on membership and no per-email
-      state is touched. The client runs the resend countdown itself.
+   - The response is identical whether the address is unlisted, was sent a code, is cooling down or is capped, and
+     the per-email Durable Object call and the send run in `waitUntil`, so the listed and unlisted paths return
+     alike. The one exception is the Deployment-wide code budget (§4.5): its single global gate is awaited on
+     every OTP request, before the Allowlist read, so its 429 never depends on membership and no per-email
+     state is touched. The client runs the resend countdown itself.
    - The "code sent" screen shows the Deployment's configured help text for a code that never arrives (check the
      address; whom to contact), because the generic response can't say why.
 3. Reporter enters the received code into the same form.
@@ -703,11 +703,11 @@ confirmation email or Staff contact is the route back.
 taxonomy picks (§2.3), the form has exactly three free-text fields, trimmed server-side like comments
 (§4.3, §4.5):
 
-| Field       | Required | Limit (after trim) | Purpose                                                                                |
-| ----------- | -------- | ------------------ | -------------------------------------------------------------------------------------- |
+| Field       | Required | Limit (after trim)        | Purpose                                                                                                                                   |
+| ----------- | -------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | Title       | yes      | 3–80 characters, one line | The Reporter's recognition handle; flows into every Report-specific email subject (§4.6), so internal newlines collapse to spaces at trim |
-| Description | yes      | 1–4,000 characters | The Report's content; also bounds the issue body                                          |
-| Exact place | no       | 1–100 characters   | The fine-grained locator under the picked Location                                        |
+| Description | yes      | 1–4,000 characters        | The Report's content; also bounds the issue body                                                                                          |
+| Exact place | no       | 1–100 characters          | The fine-grained locator under the picked Location                                                                                        |
 
 The title is written by the Reporter, not generated from category and location: fifteen "Heating — Corridor B"
 issues would be indistinguishable to Staff in GitHub's issue list, and the title is how the Reporter tells
@@ -796,6 +796,7 @@ case. Instead:
    public projection (§4.3): Priority remains private, assignment is presence-only, and title/body edits update
    current content rather than promising a revision archive. Staff comments stay link-only on purpose: a Staff
    member who needs something from the Reporter uses reveal-contact (§4.4).
+
 5. For a Major change, receiver checks `X-GitHub-Delivery` against the dedupe KV (skip if already processed) and
    writes the key only now, so ignored events cost no KV writes. It then looks up the issue number in the
    `issue-email` KV mapping and sends a short notification via Resend (§4.6) naming the change and repeating the status
@@ -948,13 +949,13 @@ read before any object exists, so an attacker can't mint objects. Per-IP bursts 
 
 **Codes** (per-email values live in the email's Durable Object):
 
-| Parameter            | Value                                                                                           |
-| -------------------- | ----------------------------------------------------------------------------------------------- |
-| Code                 | 6 digits from a CSPRNG, rejection-sampled to avoid modulo bias                                  |
-| Expiry               | 10 minutes                                                                                      |
-| Resend cooldown      | 60 seconds per email                                                                            |
-| Wrong guesses        | 5 per code, then the code is burned and a new one must be requested                             |
-| Codes per email      | 5 per hour and 10 per day                                                                       |
+| Parameter            | Value                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| Code                 | 6 digits from a CSPRNG, rejection-sampled to avoid modulo bias                                       |
+| Expiry               | 10 minutes                                                                                           |
+| Resend cooldown      | 60 seconds per email                                                                                 |
+| Wrong guesses        | 5 per code, then the code is burned and a new one must be requested                                  |
+| Codes per email      | 5 per hour and 10 per day                                                                            |
 | Codes per Deployment | 40 per day by default, configurable (Resend's free tier is 100 emails a day, shared with other mail) |
 
 A targeted address therefore allows at most 50 guesses a day (10 codes of 5 guesses) against 10⁶ combinations,
@@ -963,14 +964,14 @@ silent and only the per-IP and Deployment-wide limits can answer 429.
 
 **Rate limits:**
 
-| Endpoint          | Per IP (binding) | Per key                                                     |
-| ----------------- | ---------------- | ----------------------------------------------------------- |
-| OTP request       | 5/min            | the code caps above                                         |
-| Verify and submit | 10/min           | 5 wrong guesses per code                                    |
+| Endpoint          | Per IP (binding) | Per key                                                               |
+| ----------------- | ---------------- | --------------------------------------------------------------------- |
+| OTP request       | 5/min            | the code caps above                                                   |
+| Verify and submit | 10/min           | 5 wrong guesses per code                                              |
 | Resume submission | 10/min           | valid unguessable attempt credential; reads/resumes only that attempt |
-| Status lookup     | 20/min           | 6/min per token (binding)                                   |
-| Add comment       | 6/min            | 3/min per token (binding), 20/day per Report (Durable Object) |
-| Reissue (holder)  | none             | 3/day per Report (Durable Object)                           |
+| Status lookup     | 20/min           | 6/min per token (binding)                                             |
+| Add comment       | 6/min            | 3/min per token (binding), 20/day per Report (Durable Object)         |
+| Reissue (holder)  | none             | 3/day per Report (Durable Object)                                     |
 
 The per-IP numbers are deliberately generous backstops, since an Organization can share one NAT; the real limits
 are per email and per token. Comment text is 1–2,000 characters after trimming. The status-lookup view is cached
@@ -1029,7 +1030,7 @@ comments is dashboard-only, never a seventh template (§7 item 15a) — so the �
 Template strings are per-Deployment configuration, authored in the Deployment's one language (§2.5):
 
 1. **OTP code** — the 6-digit code, what it is for, the 10-minute validity, and `if you did not request it, ignore
-   this email`. No link.
+this email`. No link.
 2. **Submission confirmation** — Report number, title, the permanent Status link, and a keep-this-email line
    (`the link is how you follow the report and add comments`). No recap of the submitted fields: the form just
    showed them, and the status page shows them back.
@@ -1051,22 +1052,22 @@ Template strings are per-Deployment configuration, authored in the Deployment's 
 
 **Workers KV** holds only read-mostly or write-once data (ADR 0003):
 
-| Key pattern                  | Value                       | TTL                          | Purpose                                                              |
-| ---------------------------- | --------------------------- | ---------------------------- | -------------------------------------------------------------------- |
-| `allowlist:<email>`          | `{note?, addedBy, addedAt}` | none (System-admin managed)  | gates who may request an OTP; the key is the normalized email        |
-| `issue-email:<issue#>`       | `<email>`                   | none (life of the issue)     | reporter lookup for notifications + staff contact reveal             |
-| `status-token:<token>`       | `<issue#>`                  | none (until reissued)        | resolves a reporter's status link to an issue                        |
-| `issue-token:<issue#>`       | `<token>`                   | none (until reissued)        | reverse lookup so staff can resend or reissue a link (§4.3, §4.4)    |
-| `webhook-seen:<delivery-id>` | `true`                      | ~1 day                       | idempotency guard, written only for Major changes (§4.2)             |
-| `config`                      | `<the Deployment configuration, JSON>` | none (System-admin edited) | every per-Deployment value the form, dashboard and email send read (§2.4; the SPA is served only its public projection), including the UI language and timezone (§2.5) |
+| Key pattern                  | Value                                  | TTL                         | Purpose                                                                                                                                                                |
+| ---------------------------- | -------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allowlist:<email>`          | `{note?, addedBy, addedAt}`            | none (System-admin managed) | gates who may request an OTP; the key is the normalized email                                                                                                          |
+| `issue-email:<issue#>`       | `<email>`                              | none (life of the issue)    | reporter lookup for notifications + staff contact reveal                                                                                                               |
+| `status-token:<token>`       | `<issue#>`                             | none (until reissued)       | resolves a reporter's status link to an issue                                                                                                                          |
+| `issue-token:<issue#>`       | `<token>`                              | none (until reissued)       | reverse lookup so staff can resend or reissue a link (§4.3, §4.4)                                                                                                      |
+| `webhook-seen:<delivery-id>` | `true`                                 | ~1 day                      | idempotency guard, written only for Major changes (§4.2)                                                                                                               |
+| `config`                     | `<the Deployment configuration, JSON>` | none (System-admin edited)  | every per-Deployment value the form, dashboard and email send read (§2.4; the SPA is served only its public projection), including the UI language and timezone (§2.5) |
 
 **Durable Objects** (SQLite-backed) hold atomic gates, submission recovery and lifecycle coordination (§4.1, §4.5):
 
-| Object (named by)                          | State                                                                       | Purpose                                         |
-| ------------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------------- |
+| Object (named by)                            | State                                                                                                                                                                                                                                     | Purpose                                                        |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | Email gate (SHA-256 of the normalized email) | code `{hash, expiresAt, wrongGuesses}`, last-sent time, hourly/daily counts; pending submission with temporary email/payload, credential hash, fingerprint, marker, fixed token, dispatch phase/issue number; 24-hour completion receipts | OTPs and caps; atomic consume-and-record; resumable submission |
-| Report gate (the issue number)             | daily comment/reissue counts; finalization progress, token generation/lifecycle, associated pending-attempt locator while needed, deletion tombstone | budgets; serialize mapping recovery, Reissue and Erasure |
-| Global gate (one per Deployment)           | codes issued today                                                          | the Deployment-wide code budget                 |
+| Report gate (the issue number)               | daily comment/reissue counts; finalization progress, token generation/lifecycle, associated pending-attempt locator while needed, deletion tombstone                                                                                      | budgets; serialize mapping recovery, Reissue and Erasure       |
+| Global gate (one per Deployment)             | codes issued today                                                                                                                                                                                                                        | the Deployment-wide code budget                                |
 
 **Allowlist maintenance.** A System admin (repo Admin role, checked as in §4.4) manages the Allowlist from a screen
 in the staff dashboard; Triage staff can't see it. Worker endpoints do the writes: list, add one, add many (a pasted
@@ -1124,13 +1125,13 @@ about a minute (KV propagation, which also caches "not found").
 
 | Requirement (from the brief)                                       | Mechanism                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Registered users submit reports with location, nature, description | Email allowlist + OTP, no GitHub account. Issue created by the bot with labels (`category:*`, `location:*`) + the Reporter's title and a body from the fixed template (§4.1), with an optional exact place.                                                                                                                                                |
+| Registered users submit reports with location, nature, description | Email allowlist + OTP, no GitHub account. Issue created by the bot with labels (`category:*`, `location:*`) + the Reporter's title and a body from the fixed template (§4.1), with an optional exact place.                                                                                               |
 | Users track own reports' status/history                            | Permanent unguessable per-issue link is the authoritative status/history view (no login, no listing of other issues); email notifies on major transitions only and always repeats the link. Also directly resolves GitHub's "no per-issue privacy" gap via capability-based access instead of repo roles. |
-| Users can comment on their own reports (instructor)               | Comment box on the status page (§4.3). A token-gated Worker function posts the comment as the bot with a `Reporter:` marker; the reporter needs no GitHub account and no email is written to GitHub.                                                                                                     |
+| Users can comment on their own reports (instructor)                | Comment box on the status page (§4.3). A token-gated Worker function posts the comment as the bot with a `Reporter:` marker; the reporter needs no GitHub account and no email is written to GitHub.                                                                                                      |
 | Authorized users review, categorize, prioritize, assign            | Staff with GitHub Triage/Admin roles: labels (`category:*`, `priority:*`) + assignee.                                                                                                                                                                                                                     |
-| Repair progress trackable; completed-work info recorded            | Open/closed + `status:*` labels (§2.3; no Projects v2); resolution notes as issue comments. Major transitions are mirrored out via email to the reporter.                                                                                                                                                  |
-| Multiple roles with different permissions                          | Reporter is "anyone on the allowlist who completes OTP" (not a GitHub role). Maintenance staff = repo Triage; system admin = repo Admin (manages members and the Reporter Allowlist; staff onboarding is a GitHub Organization invite, automatable via the membership API).                                                                        |
-| Search / overview by open, in progress, closed                     | GitHub search qualifiers and label filters in the staff dashboard (no Projects v2, §2.3).                                                                                                                                                                                                                  |
+| Repair progress trackable; completed-work info recorded            | Open/closed + `status:*` labels (§2.3; no Projects v2); resolution notes as issue comments. Major transitions are mirrored out via email to the reporter.                                                                                                                                                 |
+| Multiple roles with different permissions                          | Reporter is "anyone on the allowlist who completes OTP" (not a GitHub role). Maintenance staff = repo Triage; system admin = repo Admin (manages members and the Reporter Allowlist; staff onboarding is a GitHub Organization invite, automatable via the membership API).                               |
+| Search / overview by open, in progress, closed                     | GitHub search qualifiers and label filters in the staff dashboard (no Projects v2, §2.3).                                                                                                                                                                                                                 |
 | Desktop application (the brief's first sentence)                   | A thin Windows-only Electron shell around the hosted SPA, which also runs as a plain website (§2.1).                                                                                                                                                                                                      |
 
 This gives every reporter both a self-service pull view (the permanent link) _and_ proactive push
@@ -1183,7 +1184,7 @@ the fake was taught live's behaviour, or the code was changed with a test. What 
 - **Device flow.** An unknown client id is `404 {"error":"Not Found"}` from both endpoints. A wrong or missing
   grant type, and a refresh token GitHub never issued, answer `incorrect_client_credentials` (HTTP 200), not
   `unsupported_grant_type` or `bad_refresh_token`; the Worker treats it as `refresh_rejected`. Polling twice at
-  once answers `slow_down` with `interval: 10`. Refresh of a *valid* token without `client_secret` (decision 13)
+  once answers `slow_down` with `interval: 10`. Refresh of a _valid_ token without `client_secret` (decision 13)
   was not re-run here: it needs an approved device code, which only a person can give.
 - **Not settled.** Whether a Triage user may set labels in a PATCH (the fake's `triageCanLabel`, default true):
   the sandbox has no Triage account, so it remains the documented assumption until one exists.
@@ -1317,6 +1318,15 @@ relevant design sections; they are not claims that the application already exist
 ---
 
 ## 8. Next steps
+
+**Reference Deployment:** the SPA and Worker are live at
+<https://fault-reports.berautoapp.workers.dev>, backed by private `Tarsashaz-demo/reports`.
+The Hungarian Appendix A configuration uses `Europe/Budapest` and `reply@mail.berautoapp.hu`;
+its save synchronizes the 27 taxonomy labels. The repository's `issues` webhook targets
+`/api/github/webhook`. Non-secret resource IDs and the verified Bot account ID/login are pinned in
+`app/wrangler.jsonc`. Deployment, live-check, Windows packaging and operator hand-off commands are
+in [the deployment runbook](./docs/runbook-deployment.md). Human inbox and Device Flow acceptance
+remain [setup ticket #20 Part B](https://github.com/Pergo911/github-issue-tracker/issues/20).
 
 The implementation plan is the sub-issues of [Implementation: reference Deployment
 MVP](https://github.com/Pergo911/github-issue-tracker/issues/19), with its verification standard and the
