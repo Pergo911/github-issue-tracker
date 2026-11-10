@@ -108,10 +108,14 @@ export type GitHubTimelineEvent =
       commit_url: null;
       rename: { from: string; to: string };
     })
-  | (Omit<GitHubComment, "performed_via_github_app"> & {
+  | (TimelineEventBase & {
+      event: "marked_as_duplicate";
+      commit_id: null;
+      commit_url: null;
+    })
+  | (GitHubComment & {
       event: "commented";
       actor: GitHubUser;
-      performed_via_github_app: null;
     });
 
 type RawRepo = Data<"GET /repos/{owner}/{repo}">;
@@ -168,6 +172,8 @@ export interface GitHubIssuesWebhookPayload {
   assignee?: GitHubUser;
   sender: GitHubUser;
   repository: GitHubRepository;
+  /** Present on repo-level hooks of an Organization's repo, as GitHub sends it. */
+  organization?: Pick<GitHubUser, "id" | "login" | "node_id" | "type">;
   installation?: { id: number };
 }
 

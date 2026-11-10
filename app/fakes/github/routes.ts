@@ -1,5 +1,9 @@
 import { GITHUB_API_VERSION } from "../../src/shared/github/constants.ts";
-import type { GitHubErrorBody, GitHubIssuesWebhookPayload } from "../../src/shared/github/types.ts";
+import type {
+  GitHubErrorBody,
+  GitHubIssue,
+  GitHubIssuesWebhookPayload,
+} from "../../src/shared/github/types.ts";
 import type { Clock } from "../clock.ts";
 import { fromBase64Url, importPublicKey } from "../keys.ts";
 import {
@@ -10,6 +14,7 @@ import {
   isoSeconds,
   type RouteContext,
 } from "../http.ts";
+import { renderMarkdown, wantsHtml } from "./markdown.ts";
 import { permissionsFor, REAL_API, Renderer } from "./render.ts";
 import { searchIssues } from "./search.ts";
 import {
@@ -215,12 +220,14 @@ export class GitHubService {
       const record = snapshot ?? this.#store.issue(event.issueNumber);
       const payload: GitHubIssuesWebhookPayload = {
         action: event.action,
-        issue: renderer.issue(record),
+        // GitHub leaves `closed_by` out of the issue in a webhook payload (measured live, ticket #32).
+        issue: webhookIssue(renderer.issue(record)),
         ...(event.changes ? { changes: event.changes } : {}),
         ...(event.label ? { label: renderer.label(event.label) } : {}),
         ...(event.assignee ? { assignee: renderer.user(event.assignee) } : {}),
         sender: renderer.user(event.sender),
         repository: renderer.repository(null),
+        organization: { ...renderer.user(this.#store.orgAccount) },
       };
       this.#deps.webhooks.emit(payload);
     }
@@ -257,7 +264,13 @@ export class GitHubService {
     r.add("GET", "/app", async (c) => {
       await this.#verifyAppJwt(c.request);
       const { appId, slug } = this.#deps.bot;
-      return jsonResponse({ id: appId, slug, name: slug, node_id: `A_${appId}` });
+      return jsonResponse({
+        id: appId,
+        client_id: this.#deps.bot.clientId,
+        slug,
+        name: slug,
+        node_id: `A_${appId}`,
+      });
     });
 
     r.add("POST", "/app/installations/:id/access_tokens", async (c) => {
@@ -281,7 +294,8 @@ export class GitHubService {
       const actor = this.#member(c);
       return jsonResponse({
         ...this.#renderer(c.url).repository(actor.role),
-        permissions: permissionsFor(actor.role),
+        // An installation token's repo `permissions` are all false: its rights are in the token, not the repo.
+        permissions: permissionsFor(actor.account.type === "Bot" ? "none" : actor.role),
       });
     });
 
@@ -305,14 +319,17 @@ export class GitHubService {
       );
       return paged(
         c.url,
-        comments.map((comment) => renderer.comment(comment)),
+        comments.map((comment) => withHtml(c.request, renderer.comment(comment))),
       );
     });
 
     r.add("GET", `${repoBase}/issues/comments/:id`, (c) => {
       this.#member(c);
       return jsonResponse(
-        this.#renderer(c.url).comment(this.#store.comment(Number(c.params["id"]))),
+        withHtml(
+          c.request,
+          this.#renderer(c.url).comment(this.#store.comment(Number(c.params["id"]))),
+        ),
       );
     });
 
@@ -405,7 +422,10 @@ export class GitHubService {
     r.add("GET", `${repoBase}/issues/:number`, (c) => {
       this.#member(c);
       return jsonResponse(
-        this.#renderer(c.url).issue(this.#store.issue(Number(c.params["number"]))),
+        withHtml(
+          c.request,
+          this.#renderer(c.url).issue(this.#store.issue(Number(c.params["number"]))),
+        ),
       );
     });
 
@@ -452,7 +472,7 @@ export class GitHubService {
         .filter((comment) => since === null || comment.updatedAt >= since);
       return paged(
         c.url,
-        comments.map((comment) => renderer.comment(comment)),
+        comments.map((comment) => withHtml(c.request, renderer.comment(comment))),
       );
     });
 
@@ -518,6 +538,12 @@ export class GitHubService {
         optionalString(body["description"], "description", true),
       );
       return jsonResponse(this.#renderer(c.url).label(label), 201);
+    });
+
+    r.add("DELETE", `${repoBase}/labels/:name`, (c) => {
+      this.#member(c, "triage");
+      this.#store.deleteLabel(c.params["name"] as string);
+      return new Response(null, { status: 204 });
     });
 
     r.add("GET", `${repoBase}/labels/:name`, (c) => {
@@ -589,13 +615,15 @@ export class GitHubService {
 
   /** Checks the App JWT as GitHub does: RS256, the App's key, `iss`, and a lifetime of at most 10 minutes. */
   async #verifyAppJwt(request: Request): Promise<void> {
+    // GitHub's messages, as observed against the live API (contract suite, ticket #32): most failures are a bare
+    // "Bad credentials", and only a few say what is wrong.
     const header = request.headers.get("authorization");
-    const token = header ? /^bearer\s+(\S+)$/i.exec(header)?.[1] : undefined;
-    const reject = (detail: string) =>
-      new GitHubFailure(401, `A JSON web token could not be decoded (${detail})`);
-    if (!token) throw new GitHubFailure(401, "A JSON web token could not be decoded");
+    if (!header) throw new GitHubFailure(401, "Requires authentication");
+    const token = /^bearer\s+(\S+)$/i.exec(header)?.[1];
+    const bad = () => new GitHubFailure(401, "Bad credentials");
+    if (!token) throw bad();
     const parts = token.split(".");
-    if (parts.length !== 3) throw reject("not three segments");
+    if (parts.length !== 3) throw bad();
     const [head, claimsPart, signature] = parts as [string, string, string];
     let parsedHeader: Json;
     let claims: Json;
@@ -603,9 +631,9 @@ export class GitHubService {
       parsedHeader = JSON.parse(new TextDecoder().decode(fromBase64Url(head))) as Json;
       claims = JSON.parse(new TextDecoder().decode(fromBase64Url(claimsPart))) as Json;
     } catch {
-      throw reject("malformed segments");
+      throw bad();
     }
-    if (parsedHeader["alg"] !== "RS256") throw reject("alg must be RS256");
+    if (parsedHeader["alg"] !== "RS256") throw bad();
     this.#publicKey ??= importPublicKey(this.#deps.bot.publicKey);
     let valid: boolean;
     try {
@@ -618,34 +646,38 @@ export class GitHubService {
     } catch {
       valid = false;
     }
-    if (!valid) throw new GitHubFailure(401, "Bad credentials: the JWT signature does not match");
+    if (!valid) throw new GitHubFailure(401, "A JSON web token could not be decoded");
     const { appId, clientId } = this.#deps.bot;
-    if (claims["iss"] !== String(appId) && claims["iss"] !== clientId) {
-      throw new GitHubFailure(401, "Bad credentials: the JWT issuer is not this App");
-    }
     // JWTs are signed on the Worker's real clock, so they are checked on it too (not the fake's offset).
     const now = Math.floor(Date.now() / 1000);
     const { iat, exp } = claims as { iat?: unknown; exp?: unknown };
-    if (typeof iat !== "number" || typeof exp !== "number")
-      throw reject("iat and exp are required");
-    if (exp <= now)
-      throw new GitHubFailure(
-        401,
-        "'Expiration time' claim ('exp') must be a numeric value representing the future time at which the assertion expires",
-      );
-    if (exp - iat > 600)
+    if (typeof iat !== "number") {
+      throw new GitHubFailure(401, "Missing 'issued at' claim ('iat') in assertion");
+    }
+    if (typeof exp !== "number" || exp <= now || iat > now + 60) throw bad();
+    if (exp - iat > 660) {
       throw new GitHubFailure(401, "'Expiration time' claim ('exp') is too far in the future");
-    if (iat > now + 60)
-      throw new GitHubFailure(
-        401,
-        "'Issued at' claim ('iat') must be an Integer representing the time that the assertion was issued",
-      );
+    }
+    if (claims["iss"] !== String(appId) && claims["iss"] !== clientId) {
+      throw new GitHubFailure(404, "Integration not found");
+    }
   }
 }
 
 /** The path the fake is mounted under, taken from the URL the client called: `/github` or empty. */
 function apiPrefix(url: URL): string {
   return url.pathname.startsWith("/github/") || url.pathname === "/github" ? "/github" : "";
+}
+
+function webhookIssue(issue: GitHubIssue): GitHubIssuesWebhookPayload["issue"] {
+  const { closed_by: _closedBy, ...rest } = issue;
+  return rest as GitHubIssuesWebhookPayload["issue"];
+}
+
+/** Adds `body_html` to a rendered issue or comment when the caller's `Accept` asks for rendered bodies. */
+function withHtml<T extends { body?: string | null }>(request: Request, item: T): T {
+  if (!wantsHtml(request.headers.get("accept"))) return item;
+  return { ...item, body_html: renderMarkdown(item.body ?? "") };
 }
 
 function paged(url: URL, items: unknown[]): Response {

@@ -11,7 +11,12 @@
       "@fakes/*": ["./fakes/*"]
     }
   },
-  "include": ["src/worker/**/*.test.ts", "src/worker/testing/**/*", "worker-configuration.d.ts"],
+  "include": [
+    "src/worker/**/*.test.ts",
+    "src/worker/testing/**/*",
+    "fakes/testing/fixtures/**/*.json",
+    "worker-configuration.d.ts"
+  ],
   "references": [
     {
       "path": "./tsconfig.shared.json"

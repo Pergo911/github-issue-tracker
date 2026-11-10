@@ -104,6 +104,14 @@ describe("POST /api/staff/refresh", () => {
   });
 });
 
+describe("POST /api/staff/refresh with a token GitHub never issued", () => {
+  it("says refresh_rejected, not upstream_unavailable: live GitHub answers incorrect_client_credentials (ticket #32)", async () => {
+    const response = await post("/api/staff/refresh", { refreshToken: `ghr_${"a".repeat(36)}` });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: { code: "refresh_rejected" } });
+  });
+});
+
 describe("GET /api/staff/meta", () => {
   it.each([
     ["read", "viewer"],

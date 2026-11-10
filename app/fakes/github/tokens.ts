@@ -40,6 +40,8 @@ export class TokenRegistry {
   readonly #clock: Clock;
   readonly #tokens = new Map<string, TokenRecord>();
   readonly #refreshTokens = new Map<string, RefreshRecord>();
+  /** Refresh tokens that were exchanged: GitHub answers these differently from ones it never issued. */
+  readonly #spentRefreshTokens = new Set<string>();
 
   constructor(clock: Clock) {
     this.#clock = clock;
@@ -86,12 +88,19 @@ export class TokenRegistry {
     const record = this.#refreshTokens.get(refreshToken);
     if (!record || record.expiresAt <= this.#clock.now()) return undefined;
     this.#refreshTokens.delete(refreshToken);
+    this.#spentRefreshTokens.add(refreshToken);
     this.#tokens.delete(record.accessToken);
     return this.mintDeviceFlowPair(record.login);
+  }
+
+  /** Whether this refresh token was issued and then exchanged (so it is dead, not unknown). */
+  wasSpent(refreshToken: string): boolean {
+    return this.#spentRefreshTokens.has(refreshToken);
   }
 
   clear(): void {
     this.#tokens.clear();
     this.#refreshTokens.clear();
+    this.#spentRefreshTokens.clear();
   }
 }

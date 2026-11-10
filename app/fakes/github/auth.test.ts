@@ -144,7 +144,6 @@ describe("installation-token exchange", () => {
 
   it.each([
     ["a malformed token", null, undefined],
-    ["a JWT for another App", { iss: "999" }, undefined],
     [
       "a JWT that expires more than 10 minutes ahead",
       { exp: Math.floor(Date.now() / 1000) + 700 },
@@ -160,6 +159,12 @@ describe("installation-token exchange", () => {
     const { reply } = await exchange(overrides, mutate);
     expect(reply.status).toBe(401);
     expect(reply.json.message).toBeTruthy();
+  });
+
+  it('answers a JWT for another App with 404 "Integration not found", as GitHub does', async () => {
+    const { reply } = await exchange({ iss: "999" }, undefined);
+    expect(reply.status).toBe(404);
+    expect(reply.json.message).toBe("Integration not found");
   });
 
   it("refuses a JWT signed with another algorithm", async () => {

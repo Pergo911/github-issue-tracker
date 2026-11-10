@@ -69,6 +69,7 @@ export interface CommentRecord {
 export type TimelineDetail =
   | { event: "labeled" | "unlabeled"; label: { name: string; color: string } }
   | { event: "closed" | "reopened"; stateReason: StateReason | null }
+  | { event: "marked_as_duplicate" }
   | { event: "assigned" | "unassigned"; assignee: string }
   | { event: "renamed"; rename: { from: string; to: string } }
   | { event: "commented"; commentId: number };
@@ -134,7 +135,7 @@ export const DEFAULT_SETTINGS: StoreSettings = { unknownLabels: "create", triage
 export interface StoreOptions {
   org: string;
   repo: string;
-  bot: { slug: string; accountId: number };
+  bot: { slug: string; accountId: number; appId: number };
 }
 
 const DEFAULT_LABEL_COLOR = "ededed";
@@ -235,6 +236,15 @@ export class GitHubStore {
     };
     this.labels.set(name.toLowerCase(), record);
     return record;
+  }
+
+  /** Removes the label from the repo and from every issue that carries it. */
+  deleteLabel(name: string): void {
+    if (!this.label(name)) throw new GitHubFailure(404, "Not Found");
+    this.labels.delete(name.toLowerCase());
+    for (const issue of this.issues.values()) {
+      issue.labels = issue.labels.filter((current) => current.toLowerCase() !== name.toLowerCase());
+    }
   }
 
   updateLabel(
@@ -478,7 +488,15 @@ export class GitHubStore {
       issue.stateReason = reason;
       issue.closedAt = this.clock.now();
       issue.closedBy = sender.login;
-      this.#record(issue.number, sender, { event: "closed", stateReason: reason });
+      // GitHub's `closed` event leaves the default reason out: only the issue itself says `completed`.
+      this.#record(issue.number, sender, {
+        event: "closed",
+        stateReason: reason === "completed" ? null : reason,
+      });
+      if (patch.duplicate_issue_id !== undefined && reason === "duplicate") {
+        const original = this.issueByDatabaseId(patch.duplicate_issue_id);
+        if (original) this.#record(original.number, sender, { event: "marked_as_duplicate" });
+      }
       events.push({ action: "closed", issueNumber: issue.number, sender });
     } else if (stateWillChange && patch.state === "open") {
       issue.state = "open";
