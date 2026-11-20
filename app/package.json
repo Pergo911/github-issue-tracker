@@ -33,6 +33,7 @@
     "test:visual": "node scripts/visual.ts",
     "test:visual:update": "node scripts/visual.ts --update",
     "verify": "node scripts/verify.ts",
+    "doctor": "node scripts/doctor.ts",
     "setup": "playwright install chromium"
   },
   "dependencies": {

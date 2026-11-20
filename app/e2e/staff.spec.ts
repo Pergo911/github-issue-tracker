@@ -4,6 +4,7 @@ import { expectAccessible } from "./support/axe.ts";
 import { urlFor } from "./support/servers.ts";
 import { staffToken, startSignedIn } from "./support/staff.ts";
 import { expect, test } from "./support/test.ts";
+import { SLOW_SIGN_IN } from "./support/timings.ts";
 
 // The Staff dashboard's sign-in and List view (ticket #27), end to end: the real Worker, the real device-flow proxy
 // and role check, and the fake GitHub. The tests share the seeded server's world, so each names its own data
@@ -16,7 +17,6 @@ const tag = (name: string) =>
 const rows = (page: Page) => page.locator("[data-report]");
 const rowOf = (page: Page, text: string) => rows(page).filter({ hasText: text });
 const link = (page: Page, name: string) => page.getByRole("link", { name, exact: true });
-const slowSignIn = { timeout: 25_000 };
 
 /** Runs the device flow to the end as `login`, approving it through the fake. */
 async function signInThroughDeviceFlow(
@@ -59,7 +59,7 @@ test.describe("signing in with the device flow", () => {
 
       await world.approveDeviceCode(code, login);
       await expect(page.getByRole("heading", { level: 1, name: hu["reports.title"] })).toBeVisible(
-        slowSignIn,
+        SLOW_SIGN_IN,
       );
       await expect(page).toHaveURL(/\/staff\/reports/);
       await expect(page.getByText(login)).toBeVisible();
@@ -82,7 +82,7 @@ test.describe("signing in with the device flow", () => {
     await signInThroughDeviceFlow(page, world, login);
     await expect(
       page.getByRole("heading", { level: 1, name: hu["staff.noAccess.title"] }),
-    ).toBeVisible(slowSignIn);
+    ).toBeVisible(SLOW_SIGN_IN);
     await expect(rows(page)).toHaveCount(0);
     await page.getByRole("button", { name: hu["staff.signOut"] }).click();
     await expect(page.getByRole("button", { name: hu["staff.signIn.start"] })).toBeVisible();
@@ -99,7 +99,7 @@ test.describe("signing in with the device flow", () => {
     await world.expireDeviceCode(first);
     await expect(
       page.getByRole("heading", { level: 1, name: hu["staff.device.expired.title"] }),
-    ).toBeVisible(slowSignIn);
+    ).toBeVisible(SLOW_SIGN_IN);
     await page.getByRole("button", { name: hu["staff.device.restart"] }).click();
     await expect(page.getByText(CODE)).toBeVisible();
     expect(await page.getByText(CODE).textContent()).not.toBe(first);
@@ -111,7 +111,7 @@ test.describe("signing in with the device flow", () => {
     await world.denyDeviceCode((await page.getByText(CODE).textContent()) ?? "");
     await expect(
       page.getByRole("heading", { level: 1, name: hu["staff.device.denied.title"] }),
-    ).toBeVisible(slowSignIn);
+    ).toBeVisible(SLOW_SIGN_IN);
     await expect(page.getByRole("button", { name: hu["staff.device.restart"] })).toBeVisible();
   });
 });
@@ -124,7 +124,7 @@ test.describe("the session", () => {
     const { login } = await staffToken("e2e-refresh", "maintenance");
     await signInThroughDeviceFlow(page, world, login);
     await expect(page.getByRole("heading", { level: 1, name: hu["reports.title"] })).toBeVisible(
-      slowSignIn,
+      SLOW_SIGN_IN,
     );
     const first = await storedTokens(page);
     expect(first?.refreshToken).toMatch(/^ghr_/);

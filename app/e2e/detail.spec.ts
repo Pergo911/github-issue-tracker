@@ -2,12 +2,12 @@ import { hu } from "../src/shared/i18n/hu.ts";
 import { urlFor } from "./support/servers.ts";
 import { staffToken, startSignedIn } from "./support/staff.ts";
 import { expect, test } from "./support/test.ts";
+import { SLOW } from "./support/timings.ts";
 
 // The Detail view (ticket #28), end to end against the real Worker and the fake GitHub: what each role sees, and a
 // Status change through the real PATCH. The tests share the seeded world, so each names its own Report.
 
 const tag = () => `detail-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-const SLOW = { timeout: 30_000 };
 
 test("a Viewer reads the Report and can comment, but has no action controls", async ({
   page,

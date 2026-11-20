@@ -21,8 +21,9 @@ Run everything from `app/`, with npm. `package.json` has the full script list; t
 
 | Command | What it checks | Run it |
 | --- | --- | --- |
-| `npm run verify` | **all of the below**, in parallel, red on any failure (about 2 minutes) | before you call a ticket done |
-| `VERIFY_JOBS=2 npm run verify` | the same with two steps at a time | when sibling worktrees load the machine and e2e or visual time out |
+| `npm run verify` | **all of the below**, red on any failure (about 4 minutes on an idle machine) | before you call a ticket done |
+| `npm run doctor` | this machine's processors, free memory and busiest processes, and what to run here | first, when a suite is slower or redder than it should be |
+| `VERIFY_JOBS=2 npm run verify` | the same with two steps at a time | when the run has to share the machine |
 | `npm run verify -- --fast` | typecheck, lint, format, unit, worker, tooling: no browser, no Docker | while you work |
 | `npm run typecheck` | `wrangler types`, then `tsc -b` over client, worker, shared, tests, tooling | after type-level changes |
 | `npm run lint` · `npm run format` | ESLint (`format:check` is Prettier's check) | before committing |
@@ -43,6 +44,12 @@ Run everything from `app/`, with npm. `package.json` has the full script list; t
 `npm run setup` installs the Chromium that `test:e2e` and `screenshots` use. `npm run test:visual` needs Docker
 running. Extra arguments reach Playwright: `npm run test:e2e -- -g "home page"`. Run Playwright through these
 scripts, never `npx playwright test`: they pick the ports and state the run needs.
+
+A red `test:e2e` is the machine until a serial run says otherwise: re-run the journey alone with
+`--workers=1` before you touch the code (the suite runs four browsers at once, `E2E_WORKERS` overrides it, and
+at eleven — Playwright's default — recorded runs failed 12 of 23). While iterating on a screen, scope the
+reference images the same way (`npm run test:visual -- -g <screen-id>`): the full list is every declared screen
+at two sizes in two schemes, and about four minutes.
 
 ### Definition of done
 
@@ -182,6 +189,9 @@ may use a fixed port or shared global state:
 - The Docker run starts a container with a unique name on a random loopback port and mounts nothing: the dev
   servers stay on the host and the container's browser reaches them through Playwright's tunnel.
 - Run one `verify` per worktree at a time (the type check and the compile-boundary tests share `.tsbuild/`).
+  `verify` takes a machine-wide lock and prints whose turn it is, so a second one queues instead of competing:
+  two at once is what made recorded runs take 823s and fail `test:e2e` and `test:visual` as if the code were
+  broken. `VERIFY_NO_WAIT=1` runs beside it anyway.
 - Stop a server by its PID. Killing every `node.exe` or `workerd.exe` takes down the other worktrees' servers.
 
 ## Working in `shell/`
