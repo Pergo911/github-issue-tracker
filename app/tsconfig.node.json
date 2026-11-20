@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild/node",
+    "tsBuildInfoFile": ".tsbuild/node.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@fakes/*": ["./fakes/*"]
+    }
+  },
+  "include": ["vite.config.ts", "vitest.config.ts", "eslint-rules/**/*.ts", "fakes/node/**/*.ts"],
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    },
+    {
+      "path": "./tsconfig.fakes.json"
+    }
+  ]
+}

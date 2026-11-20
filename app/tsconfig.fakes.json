@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild/fakes",
+    "tsBuildInfoFile": ".tsbuild/fakes.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
+  },
+  "include": ["fakes/**/*"],
+  "exclude": ["fakes/**/*.test.ts", "fakes/node/**/*"],
+  "references": [{ "path": "./tsconfig.shared.json" }]
+}

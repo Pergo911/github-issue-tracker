@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild/test-worker",
+    "tsBuildInfoFile": ".tsbuild/test-worker.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/vitest-plugin/types"],
+    "paths": {
+      "@worker/*": ["./src/worker/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@fakes/*": ["./fakes/*"]
+    }
+  },
+  "include": [
+    "src/worker/**/*.test.ts",
+    "src/worker/testing/**/*",
+    "fakes/testing/fixtures/**/*.json",
+    "worker-configuration.d.ts"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    },
+    {
+      "path": "./tsconfig.worker.json"
+    },
+    {
+      "path": "./tsconfig.fakes.json"
+    }
+  ]
+}

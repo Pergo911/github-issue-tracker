@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild/worker",
+    "tsBuildInfoFile": ".tsbuild/worker.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": [],
+    "paths": {
+      "@worker/*": ["./src/worker/*"],
+      "@shared/*": ["./src/shared/*"]
+    }
+  },
+  "include": ["src/worker/**/*", "worker-configuration.d.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/worker/testing/**/*"],
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    }
+  ]
+}

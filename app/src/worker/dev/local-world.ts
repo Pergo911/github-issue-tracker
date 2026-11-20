@@ -1,0 +1,115 @@
+import type { Hono } from "hono";
+import { z } from "zod";
+import { defineEndpoint, type } from "@shared/api/contract.ts";
+import type { StaffRole } from "@shared/github/roles.ts";
+import type { GitHubIssue } from "@shared/github/types.ts";
+import { commonErrorResponse } from "../api/errors.ts";
+import { registerEndpoint } from "../api/register.ts";
+import { createBotClient } from "../github/bot-client.ts";
+import { sendMail } from "../resend/send-mail.ts";
+
+/**
+ * Smoke routes that exist only in the local world (`vite dev` sets `LOCAL_WORLD`, ticket #22): they prove
+ * from a running dev server that the Worker reaches the fake GitHub as the Bot, resolves a Staff token to a
+ * role, and sends mail through the fake Resend. A deployed Worker has no `LOCAL_WORLD`, so they answer 404.
+ * They are not part of the API contract the SPA uses. Per-IP limits key on the `x-dev-client-ip` header here, so
+ * parallel tests do not share one address.
+ */
+const smoke = defineEndpoint({
+  method: "POST",
+  path: "/api/_dev/smoke",
+  request: z.object({ to: z.string().min(3) }),
+  response: type<{
+    issueNumber: number;
+    issueTitle: string;
+    author: string;
+    authorType: string;
+    mailId: string;
+  }>(),
+  errors: {},
+});
+
+const allowlist = defineEndpoint({
+  method: "POST",
+  path: "/api/_dev/allowlist",
+  request: z.object({ email: z.string().min(3) }),
+  response: type<{ key: string }>(),
+  errors: {},
+});
+
+const failCreate = defineEndpoint({
+  method: "POST",
+  path: "/api/_dev/fail-create",
+  request: z.object({ email: z.string().min(3) }),
+  response: type<{ armed: true }>(),
+  errors: {},
+});
+
+/**
+ * Addresses whose next issue create fails before it reaches GitHub (the `/api/_dev/fail-create` route): a
+ * per-address fault, so parallel end-to-end tests never trip each other (a fake GitHub fault is global).
+ */
+export const injectedCreateFailures = new Set<string>();
+
+const whoami = defineEndpoint({
+  method: "GET",
+  path: "/api/_dev/whoami",
+  request: z.object({}),
+  response: type<{ role: StaffRole; login: string }>(),
+  errors: {},
+  role: "viewer",
+});
+
+export function registerLocalWorld(app: Hono<{ Bindings: Env }>): void {
+  app.use("/api/_dev/*", async (c, next) => {
+    if (!c.env.LOCAL_WORLD) return commonErrorResponse("not_found");
+    await next();
+    return undefined;
+  });
+
+  registerEndpoint(app, smoke, async ({ env, input }) => {
+    const bot = createBotClient(env);
+    const created = await bot.request<GitHubIssue>("POST", bot.repoPath("/issues"), {
+      body: {
+        title: "Local world smoke test",
+        body: "Created by /api/_dev/smoke",
+        labels: ["smoke"],
+      },
+    });
+    const read = await bot.request<GitHubIssue>(
+      "GET",
+      bot.repoPath(`/issues/${created.data.number}`),
+    );
+    const mail = await sendMail(env, {
+      from: `Local world <reports@${env.RESEND_FROM_DOMAIN}>`,
+      to: input.to,
+      subject: "Local world smoke test",
+      text: `The Bot created issue #${read.data.number}.`,
+    });
+    return {
+      issueNumber: read.data.number,
+      issueTitle: read.data.title,
+      author: read.data.user.login,
+      authorType: read.data.user.type,
+      mailId: mail.id,
+    };
+  });
+
+  // Stands in for the Allowlist screen (ticket #28) so end-to-end tests can put an address on the list.
+  registerEndpoint(app, allowlist, async ({ env, input }) => {
+    const key = `allowlist:${input.email.trim().toLowerCase()}`;
+    await env.KV.put(
+      key,
+      JSON.stringify({ addedBy: "local-world", addedAt: new Date().toISOString() }),
+    );
+    return { key };
+  });
+
+  // Makes the next create for one address fail before GitHub: the attempt is left for recovery (ticket #24).
+  registerEndpoint(app, failCreate, ({ input }) => {
+    injectedCreateFailures.add(input.email.trim().toLowerCase());
+    return { armed: true } as const;
+  });
+
+  registerEndpoint(app, whoami, ({ caller }) => ({ role: caller.role, login: caller.login }));
+}

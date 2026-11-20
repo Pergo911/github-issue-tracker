@@ -1,0 +1,36 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild/test-unit",
+    "tsBuildInfoFile": ".tsbuild/test-unit.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"],
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/client/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@fakes/*": ["./fakes/*"]
+    }
+  },
+  "include": [
+    "fakes/testing/fixtures/**/*.json",
+    "src/shared/**/*.test.ts",
+    "fakes/**/*.test.ts",
+    "src/client/**/*.test.ts",
+    "src/client/**/*.test.tsx"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    },
+    {
+      "path": "./tsconfig.client.json"
+    },
+    {
+      "path": "./tsconfig.fakes.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}
