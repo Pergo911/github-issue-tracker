@@ -137,14 +137,18 @@ describe("POST /api/reports/code", () => {
     expect(fakeWorld().control.outbox(listed)).toEqual([]);
   });
 
-  it("answers 429 after five requests a minute from one address", async () => {
+  it("answers 429 after five requests a minute from one address without burning the daily budget", async () => {
+    await env.KV.put("config", JSON.stringify({ ...referenceConfig, dailyCodeBudget: 6 }));
     const ip = freshIp();
     const statuses: number[] = [];
     for (let attempt = 0; attempt < 7; attempt++) {
       statuses.push((await post("code", { email: "x@example.hu" }, ip)).status);
     }
-    expect(statuses.filter((status) => status === 200).length).toBeLessThanOrEqual(5);
+    const allowed = statuses.filter((status) => status === 200).length;
+    expect(allowed).toBeLessThanOrEqual(5);
     expect(statuses.at(-1)).toBe(429);
+    // The 429s from the noisy IP did not consume the remaining Deployment budget for another IP.
+    expect((await post("code", { email: "other@example.hu" }, freshIp())).status).toBe(200);
   });
 
   it("says not_configured while the Deployment has no configuration, and rejects a malformed email", async () => {

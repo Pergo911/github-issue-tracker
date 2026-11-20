@@ -178,14 +178,14 @@ export class ReportGate extends DurableObject<Env> {
   }
 
   /** Runs one repair pass (single-flight): every missing mapping is written, then the attempt is completed. */
-  converge(): Promise<LifecycleView | null> {
-    this.running ??= this.runConverge().finally(() => {
+  converge(unattended = false): Promise<LifecycleView | null> {
+    this.running ??= this.runConverge(unattended).finally(() => {
       this.running = null;
     });
     return this.running;
   }
 
-  private async runConverge(): Promise<LifecycleView | null> {
+  private async runConverge(unattended: boolean): Promise<LifecycleView | null> {
     const first = this.read();
     if (!first) return null;
     try {
@@ -207,7 +207,7 @@ export class ReportGate extends DurableObject<Env> {
           const receipt = await this.env.EMAIL_GATE.getByName(life.attempt.emailHash).complete(
             life.attempt.credentialHash,
             Date.now(),
-            { generation: life.generation, statusToken: life.statusToken },
+            { generation: life.generation, unattended },
           );
           // Told, or the attempt is already gone (discarded, or completed by another pass): nothing left to tell.
           const after = this.read();
@@ -389,7 +389,7 @@ export class ReportGate extends DurableObject<Env> {
   /** Alarms are at-least-once and the built-in retries are finite: failure is caught and re-armed here. */
   override async alarm(): Promise<void> {
     try {
-      await this.converge();
+      await this.converge(true);
     } catch (error) {
       console.error("a repair pass failed; it is re-armed", error);
     }

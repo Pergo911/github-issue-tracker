@@ -129,7 +129,12 @@ describe("GET /api/staff/meta", () => {
         role,
         login: `user-${repoRole}`,
         repo: { owner: TEST_ORG, name: TEST_REPO },
-        bot: { login: `${TEST_BOT.slug}[bot]`, id: expect.any(Number), type: "Bot" },
+        bot: {
+          login: `${TEST_BOT.slug}[bot]`,
+          id: expect.any(Number),
+          type: "Bot",
+          appId: Number(env.BOT_APP_ID),
+        },
       });
     },
   );

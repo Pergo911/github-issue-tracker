@@ -1,7 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import type { ReportFields } from "@shared/reports/validate.ts";
+import { loadConfig } from "../config/load.ts";
 import { findMarkerMatches } from "../recovery/scan.ts";
 import { constantTimeEqual, generateOtp, sha256Hex } from "../util/crypto.ts";
+import { sendTemplate } from "../util/request.ts";
 import { reach } from "./probe.ts";
 
 /** The code's life, its cooldown and its caps (SPEC 4.5). */
@@ -252,8 +254,8 @@ export class EmailGate extends DurableObject<Env> {
    * uncertain create is settled by the marker scan (never by another POST), a known issue is finalized through
    * the Report gate. Answers where it stands.
    */
-  recover(now: number = Date.now()): Promise<RecoverView> {
-    this.recovering ??= this.runRecover(now).finally(() => {
+  recover(now: number = Date.now(), unattended = false): Promise<RecoverView> {
+    this.recovering ??= this.runRecover(now, unattended).finally(() => {
       this.recovering = null;
     });
     return this.recovering;
@@ -270,7 +272,7 @@ export class EmailGate extends DurableObject<Env> {
     await this.schedule();
   }
 
-  private async runRecover(now: number): Promise<RecoverView> {
+  private async runRecover(now: number, unattended: boolean): Promise<RecoverView> {
     const kv = this.ctx.storage.kv;
     for (let step = 0; step < 8; step++) {
       const attempt = kv.get<PendingAttempt>("attempt");
@@ -334,7 +336,7 @@ export class EmailGate extends DurableObject<Env> {
                 credentialHash: attempt.credentialHash,
               },
             });
-            const view = await reportGate.converge();
+            const view = await reportGate.converge(unattended);
             if (view?.state === "deleted") {
               // The Report was erased before this attempt could finish: there is nothing left to finalize.
               await this.dropAttempt(attempt.credentialHash);
@@ -371,20 +373,21 @@ export class EmailGate extends DurableObject<Env> {
   async complete(
     credentialHash: string,
     now: number = Date.now(),
-    link: { generation: number; statusToken: string },
+    options: { generation: number; unattended?: boolean },
   ): Promise<CompletionReceipt | null> {
     const kv = this.ctx.storage.kv;
     const existing = kv.get<CompletionReceipt>(`receipt:${credentialHash}`);
     const attempt = this.attemptOf(credentialHash);
     if (!attempt || attempt.issueNumber === undefined) return existing ?? null;
+    // SPEC 4.1: a receipt carries the submission's original token and generation (1), never a successor token
+    // issued by a Reissue during finalization.
     const receipt: CompletionReceipt = {
       credentialHash,
       fingerprint: attempt.fingerprint,
       issueNumber: attempt.issueNumber,
       title: attempt.fields.title,
-      // The Report gate's current token and generation, which a Reissue during the repair may have changed.
-      statusToken: link.statusToken,
-      generation: link.generation,
+      statusToken: attempt.statusToken,
+      generation: 1,
       completedAt: now,
       expiresAt: now + RECEIPT_TTL_MS,
     };
@@ -392,6 +395,22 @@ export class EmailGate extends DurableObject<Env> {
     kv.delete("attempt");
     await this.unregister(attempt);
     await this.schedule();
+    if (options.unattended && options.generation === 1) {
+      // Unattended alarm completion (tab closed): still send the best-effort confirmation email (SPEC 4.1).
+      try {
+        const config = await loadConfig(this.env.KV);
+        if (config !== null) {
+          const base = this.env.APP_URL.replace(/\/+$/, "");
+          await sendTemplate(this.env, config, "submissionConfirmation", attempt.email, {
+            number: receipt.issueNumber,
+            title: receipt.title,
+            link: `${base}/status/${receipt.statusToken}`,
+          });
+        }
+      } catch (error) {
+        console.error("the unattended confirmation email could not be sent", error);
+      }
+    }
     return receipt;
   }
 
@@ -483,7 +502,7 @@ export class EmailGate extends DurableObject<Env> {
     const attempt = kv.get<PendingAttempt>("attempt");
     if (attempt && attempt.dueAt <= now) {
       try {
-        await this.recover(now);
+        await this.recover(now, true);
       } catch (error) {
         console.error("an unattended recovery pass failed; it is re-armed", error);
         await this.fail(attempt.credentialHash);
