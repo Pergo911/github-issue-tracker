@@ -1,0 +1,110 @@
+import { z } from "zod";
+import type { StaffRole } from "../github/roles.ts";
+
+/**
+ * Contract-first API (SPEC 2.6). Each endpoint declares its method, path, a Zod request schema,
+ * its response type and its error codes. The Worker registers handlers against these declarations
+ * (`worker/api/register.ts`) and the SPA calls them through `callApi` (`client/api/call-api.ts`),
+ * so neither side can drift. Responses are typed, not parsed at runtime: the SPA and the Worker
+ * deploy as one build. Errors travel as stable codes; the SPA localizes them (`api.error.<code>`).
+ *
+ * The request schema describes the query string for GET and DELETE and the JSON body for the rest.
+ * Path parameters are not part of the contract: keep an identifier in the query or the body, or extend
+ * `defineEndpoint`, `registerEndpoint` and `callApi` together, with a test.
+ */
+
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/** Codes any endpoint can answer with, and the HTTP status each travels with. */
+export const COMMON_ERROR_STATUS = {
+  invalid_request: 400,
+  not_found: 404,
+  rate_limited: 429,
+  internal_error: 500,
+  /** A gated endpoint was called without a (valid) GitHub token. */
+  unauthorized: 401,
+  /** The caller is signed in but lacks the role the endpoint declares, or is not a member (SPEC 2.4). */
+  forbidden: 403,
+  /** The role check could not ask GitHub: it fails closed. */
+  upstream_unavailable: 502,
+} as const;
+export type CommonErrorCode = keyof typeof COMMON_ERROR_STATUS;
+
+/** Codes only the SPA produces: the request never completed, or the answer was not ours. */
+export const CLIENT_ERROR_CODES = ["network_error", "invalid_response"] as const;
+export type ClientErrorCode = (typeof CLIENT_ERROR_CODES)[number];
+
+export interface Endpoint<
+  M extends HttpMethod = HttpMethod,
+  P extends `/api/${string}` = `/api/${string}`,
+  Req extends z.ZodType = z.ZodType,
+  Res = unknown,
+  Errors extends Record<string, number> = Record<string, number>,
+  Role extends StaffRole | undefined = StaffRole | undefined,
+> {
+  readonly method: M;
+  readonly path: P;
+  readonly request: Req;
+  /** Phantom: only its type is used. Write `response: type<MyResponse>()`. */
+  readonly response: Res;
+  /** The endpoint's own error codes and the HTTP status each travels with. */
+  readonly errors: Errors;
+  /**
+   * The lowest dashboard role allowed to call it. Declaring it is what gates the endpoint: `registerEndpoint`
+   * installs `requireRole` for it, so a gated endpoint cannot be registered without its gate (SPEC 2.4). A
+   * caller sends their GitHub token as `Authorization: Bearer`. Leave it out for a public endpoint.
+   */
+  readonly role?: Role;
+}
+
+export type AnyEndpoint = Endpoint<
+  HttpMethod,
+  `/api/${string}`,
+  z.ZodType,
+  unknown,
+  Record<string, number>,
+  StaffRole | undefined
+>;
+
+export function defineEndpoint<
+  const M extends HttpMethod,
+  const P extends `/api/${string}`,
+  Req extends z.ZodType,
+  Res,
+  const Errors extends Record<string, number>,
+  const Role extends StaffRole | undefined = undefined,
+>(endpoint: Endpoint<M, P, Req, Res, Errors, Role>): Endpoint<M, P, Req, Res, Errors, Role> {
+  return endpoint;
+}
+
+/** A type-only value for an endpoint's `response`. */
+export function type<T>(): T {
+  return undefined as unknown as T;
+}
+
+export type RequestOf<E extends AnyEndpoint> = z.input<E["request"]>;
+export type ParsedRequestOf<E extends AnyEndpoint> = z.output<E["request"]>;
+export type ResponseOf<E extends AnyEndpoint> = E["response"];
+/** Every code the endpoint can fail with, as the SPA sees it. */
+export type ErrorCodeOf<E extends AnyEndpoint> =
+  (keyof E["errors"] & string) | CommonErrorCode | ClientErrorCode;
+/** The codes the Worker may send for this endpoint (not the client-only ones). */
+export type WireErrorCodeOf<E extends AnyEndpoint> = (keyof E["errors"] & string) | CommonErrorCode;
+
+export function statusOf<E extends AnyEndpoint>(endpoint: E, code: WireErrorCodeOf<E>): number {
+  const own: Record<string, number> = endpoint.errors;
+  const common: Record<string, number> = COMMON_ERROR_STATUS;
+  return own[code] ?? common[code] ?? 500;
+}
+
+/** The body of every error response: `{ "error": { "code": "..." } }`, with a `reference` or `fields` only where stated. */
+export const apiErrorBodySchema = z.object({
+  error: z.object({
+    code: z.string().min(1),
+    /** A submission's reference, for the codes that hand a Reporter to a person (SPEC 4.1). */
+    reference: z.string().min(1).max(40).optional(),
+    /** Which fields a refused save names (the configuration's `invalid_config`), as path and stable code. */
+    fields: z.array(z.object({ path: z.string(), code: z.string() })).optional(),
+  }),
+});
+export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>;

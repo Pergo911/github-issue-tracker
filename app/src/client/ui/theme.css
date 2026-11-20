@@ -1,0 +1,208 @@
+/*
+ * The one theme file (SPEC 2.7, ADR 0004, docs/ui-github-look.md).
+ * Primer's tokens give the look; shadcn's variable names are aliases of them; Tailwind reads the aliases.
+ * There is no `.dark` block: Primer's variables flip with the theme attributes on <html>
+ * (data-color-mode="auto" follows the OS). Components use the tokens below, never a hard-coded colour.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@primer/primitives/dist/css/primitives.css";
+@import "@primer/primitives/dist/css/functional/themes/light.css";
+@import "@primer/primitives/dist/css/functional/themes/dark.css";
+
+/* `dark:` utilities in a copied shadcn component follow the OS, like Primer's `auto` mode. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+:root {
+  /* shadcn's variables, aliased to Primer tokens (docs/ui-github-look.md) */
+  --background: var(--bgColor-default);
+  --foreground: var(--fgColor-default);
+  --card: var(--bgColor-default);
+  --card-foreground: var(--fgColor-default);
+  --popover: var(--overlay-bgColor);
+  --popover-foreground: var(--fgColor-default);
+  --primary: var(--button-primary-bgColor-rest);
+  --primary-foreground: var(--button-primary-fgColor-rest);
+  --secondary: var(--button-default-bgColor-rest);
+  --secondary-foreground: var(--button-default-fgColor-rest);
+  --muted: var(--bgColor-muted);
+  --muted-foreground: var(--fgColor-muted);
+  /* shadcn's `accent` is a hover surface; links and focus use `link` and `ring` instead. */
+  --accent: var(--control-transparent-bgColor-hover);
+  --accent-foreground: var(--fgColor-default);
+  --destructive: var(--bgColor-danger-emphasis);
+  --border: var(--borderColor-default);
+  --input: var(--control-borderColor-rest);
+  --ring: var(--focus-outlineColor);
+  --radius: var(--borderRadius-medium);
+
+  /* Tokens shadcn has no name for */
+  --primary-hover: var(--button-primary-bgColor-hover);
+  --secondary-hover: var(--button-default-bgColor-hover);
+  --secondary-border: var(--button-default-borderColor-rest);
+  --link: var(--fgColor-accent);
+  --accent-muted: var(--bgColor-accent-muted);
+  --accent-emphasis: var(--borderColor-accent-emphasis);
+  /* Not `--border-muted`: Primer defines that name itself (a `1px solid` shorthand), and its theme would win. */
+  --border-subtle: var(--borderColor-muted);
+  --danger: var(--fgColor-danger);
+  --danger-muted: var(--bgColor-danger-muted);
+  --attention: var(--fgColor-attention);
+  --attention-muted: var(--bgColor-attention-muted);
+  --neutral-muted: var(--bgColor-neutral-muted);
+  --on-emphasis: var(--fgColor-onEmphasis);
+  /* Report state colours: open green, closed-as-fixed purple, rejected neutral grey */
+  --state-open: var(--fgColor-open);
+  --state-open-emphasis: var(--bgColor-open-emphasis);
+  --state-done: var(--fgColor-done);
+  --state-done-emphasis: var(--bgColor-done-emphasis);
+  --state-neutral: var(--fgColor-muted);
+  --state-neutral-emphasis: var(--bgColor-neutral-emphasis);
+}
+
+@theme inline {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-border: var(--secondary-border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-link: var(--link);
+  --color-accent-muted: var(--accent-muted);
+  --color-accent-emphasis: var(--accent-emphasis);
+  --color-danger: var(--danger);
+  --color-danger-muted: var(--danger-muted);
+  --color-attention: var(--attention);
+  --color-attention-muted: var(--attention-muted);
+  --color-neutral-muted: var(--neutral-muted);
+  --color-on-emphasis: var(--on-emphasis);
+  --color-state-open: var(--state-open);
+  --color-state-open-emphasis: var(--state-open-emphasis);
+  --color-state-done: var(--state-done);
+  --color-state-done-emphasis: var(--state-done-emphasis);
+  --color-state-neutral: var(--state-neutral);
+  --color-state-neutral-emphasis: var(--state-neutral-emphasis);
+
+  /* Primer's radii: 3 / 6 / 12 px */
+  --radius-sm: var(--borderRadius-small);
+  --radius-md: var(--borderRadius-medium);
+  --radius-lg: var(--borderRadius-large);
+  --radius-xl: var(--borderRadius-large);
+
+  --shadow-resting: var(--shadow-resting-small);
+  --shadow-floating: var(--shadow-floating-small);
+
+  /* Primer's breakpoints: 544 / 768 / 1012 / 1280 / 1400 px */
+  --breakpoint-sm: 34rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 63.25rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 87.5rem;
+
+  --container-page: 63.25rem;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    color-scheme: light dark;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: var(--text-body-size-medium);
+    line-height: var(--text-body-lineHeight-medium);
+  }
+
+  /* Primer's focus ring */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+}
+
+/*
+ * Label pills from one hex colour: GitHub's own formula (docs/ui-github-look.md). `labelColorVars` sets
+ * --label-r/g/b (0 to 255), --label-h (degrees) and --label-s/--label-l (plain 0 to 100 numbers) inline.
+ */
+.label-pill {
+  --perceived-lightness: calc(
+    (var(--label-r) * 0.2126 + var(--label-g) * 0.7152 + var(--label-b) * 0.0722) / 255
+  );
+  --lightness-switch: max(
+    0,
+    min(calc(1 / (var(--lightness-threshold) - var(--perceived-lightness))), 1)
+  );
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 2em;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+
+  /* light mode */
+  --lightness-threshold: 0.453;
+  --border-threshold: 0.96;
+  --border-alpha: max(
+    0,
+    min(calc((var(--perceived-lightness) - var(--border-threshold)) * 100), 1)
+  );
+  background: rgb(var(--label-r), var(--label-g), var(--label-b));
+  color: hsl(0deg, 0%, calc(var(--lightness-switch) * 100%));
+  border-color: hsl(
+    var(--label-h) calc(var(--label-s) * 1%) calc((var(--label-l) - 25) * 1%) / var(--border-alpha)
+  );
+}
+
+@media (prefers-color-scheme: dark) {
+  .label-pill {
+    --lightness-threshold: 0.6;
+    --background-alpha: 0.18;
+    --border-alpha: 0.3;
+    --lighten-by: calc(
+      (var(--lightness-threshold) - var(--perceived-lightness)) * 100 * var(--lightness-switch)
+    );
+    background: rgb(var(--label-r) var(--label-g) var(--label-b) / var(--background-alpha));
+    color: hsl(
+      var(--label-h) calc(var(--label-s) * 1%) calc((var(--label-l) + var(--lighten-by)) * 1%)
+    );
+    border-color: hsl(
+      var(--label-h) calc(var(--label-s) * 1%) calc((var(--label-l) + var(--lighten-by)) * 1%) /
+        var(--border-alpha)
+    );
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild/tooling",
+    "tsBuildInfoFile": ".tsbuild/tooling.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
+  },
+  "include": ["playwright.config.ts", "e2e/**/*", "scripts/**/*"],
+  "references": [
+    {
+      "path": "./tsconfig.shared.json"
+    },
+    {
+      "path": "./tsconfig.fakes.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}
