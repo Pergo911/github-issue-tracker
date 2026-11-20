@@ -215,17 +215,28 @@ test.describe("the Status page", () => {
     const filed = await fileReport(request, world, page);
     // Comments: 3 a minute for one link
     await open(page, filed.token);
-    for (const text of ["egy", "kettő", "három"]) {
+    for (const [index, text] of ["egy", "kettő", "három"].entries()) {
       await sendComment(page, text);
       await expect(page.getByRole("status")).toBeVisible();
+      await expect(comments(page)).toHaveCount(index + 1);
     }
     await sendComment(page, "négy");
     await expect(page.getByRole("alert")).toBeVisible();
     await expect(page.locator("#comment")).toHaveValue("négy");
 
-    // Lookups: 6 a minute for one link (the page has loaded 1 + 3 refreshes so far)
-    for (let load = 0; load < 3; load++) await page.reload();
-    await page.reload();
+    // Lookups: 6 a minute for one link — wait for each reload's lookup to land so rapid reloads never abort it.
+    let limited = false;
+    for (let load = 0; load < 7; load++) {
+      const lookup = page.waitForResponse((response) =>
+        response.url().includes("/api/status/lookup"),
+      );
+      await page.reload();
+      if ((await lookup).status() === 429) {
+        limited = true;
+        break;
+      }
+    }
+    expect(limited).toBe(true);
     await expect(page.getByRole("alert")).toBeVisible();
   });
 

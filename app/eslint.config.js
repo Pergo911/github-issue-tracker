@@ -72,7 +72,6 @@ export default defineConfig([
       "e2e/**/*.ts",
       "fakes/testing/**/*.ts",
       // The live checks read GitHub's JSON as it comes.
-      "fakes/node/contract/**/*.ts",
       "scripts/capture-webhooks.ts",
       "scripts/check-titles.ts",
     ],

@@ -521,22 +521,31 @@ for (const entry of targets) {
     });
 
     describe("search", () => {
-      it("finds an issue by a word of its title, scoped to the repo", async () => {
-        const issue = await createIssue("searchable");
-        const query = `repo:${t.org}/${t.repo} is:issue ${TAG} in:title`;
+      it("finds an issue by title word, label and state qualifiers, scoped to the repo", async () => {
+        const tag = await createLabel("search-hit", "0052cc");
+        const hit = await createIssue("searchable", { labels: [tag.name] });
+        const closed = await createIssue("searchable", { labels: [tag.name] });
+        expectStatus(
+          await github("PATCH", `/issues/${closed.number}`, {
+            json: { state: "closed", state_reason: "not_planned" },
+          }),
+          200,
+        );
+        const query = `repo:${t.org}/${t.repo} is:issue is:open label:"${tag.name}" ${TAG}`;
         let found: number[] = [];
         // GitHub's index lags a few seconds behind the write.
-        for (let attempt = 0; attempt < 15 && !found.includes(issue.number); attempt += 1) {
+        for (let attempt = 0; attempt < 15 && !found.includes(hit.number); attempt += 1) {
           const reply = await t.github("GET", "/search/issues", {
             token: bot,
-            query: { q: query },
+            query: { q: query, sort: "created", order: "asc" },
           });
           expectStatus(reply, 200);
           expect(reply.json).toMatchObject({ incomplete_results: false });
           found = reply.json.items.map((i: { number: number }) => i.number);
-          if (!found.includes(issue.number)) await new Promise((r) => setTimeout(r, 2000));
+          if (!found.includes(hit.number)) await new Promise((r) => setTimeout(r, 2000));
         }
-        expect(found).toContain(issue.number);
+        expect(found).toContain(hit.number);
+        expect(found).not.toContain(closed.number);
       }, 60_000);
     });
 
