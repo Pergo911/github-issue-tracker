@@ -1,6 +1,7 @@
 import { remoteControl } from "../fakes/control.ts";
 import { startBridge } from "../fakes/node/bridge.ts";
 import { createTestWorld } from "../fakes/testing/world.ts";
+import { GITHUB_API_VERSION } from "../src/shared/github/constants.ts";
 import { controlUrl, urlFor } from "./support/servers.ts";
 import { expect, test } from "./support/test.ts";
 
@@ -16,7 +17,7 @@ test.describe("the local world in vite dev", () => {
     world,
   }) => {
     const address = "local-world-demo@example.hu";
-    const before = (await world.summary()).issues;
+    const unrelated = await world.createReport({ title: "Smoke test unrelated deletion" });
     const response = await request.post(urlFor("seeded", "/api/_dev/smoke"), {
       data: { to: address },
     });
@@ -27,10 +28,31 @@ test.describe("the local world in vite dev", () => {
       author: "fault-reports-bot[bot]",
       authorType: "Bot",
     });
-    expect((await world.summary()).issues).toBeGreaterThan(before);
+    // Another journey can delete its own Report while this smoke request is in flight.
+    await world.deleteReport(unrelated.number);
+    // Assert this test's issue, not a shared count that deletion can keep unchanged.
+    const { token } = await world.addStaff({ login: "e2e-smoke-reader", role: "read" });
+    const { org, repo } = await world.summary();
+    const issue = await request.get(
+      `${githubBase}/repos/${org}/${repo}/issues/${result.issueNumber}`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-github-api-version": GITHUB_API_VERSION,
+          "user-agent": "e2e",
+        },
+      },
+    );
+    expect(issue.status()).toBe(200);
+    expect(await issue.json()).toMatchObject({
+      number: result.issueNumber,
+      title: "Local world smoke test",
+      user: { login: "fault-reports-bot[bot]", type: "Bot" },
+    });
     const mail = await world.latestMailTo(address);
     expect(mail?.id).toBe(result.mailId);
     expect(mail?.subject).toBe("Local world smoke test");
+    expect(mail?.text).toContain(`issue #${result.issueNumber}`);
   });
 
   test("a Staff token resolves to its role through the Worker, and non-members and strangers are refused", async ({

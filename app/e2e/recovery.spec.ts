@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { codeFromMailbox } from "./support/mail.ts";
 import { serverOrigin, urlFor } from "./support/servers.ts";
 import { expect, test } from "./support/test.ts";
 import type { AsyncControl } from "../fakes/control.ts";
@@ -38,13 +39,7 @@ async function fillAndRequestCode(page: Page, world: AsyncControl, email: string
   await page.locator("#place").fill("B lépcsőház");
   await page.locator("form button[type=submit]").click();
   await expect(page.locator("#code")).toBeVisible();
-  await expect
-    .poll(async () => (await world.outbox(email)).length, { timeout: 15_000 })
-    .toBeGreaterThan(0);
-  const mails = await world.outbox(email);
-  const code = /\b(\d{6})\b/.exec(mails.at(-1)?.text ?? "")?.[1];
-  expect(code).toBeTruthy();
-  await page.locator("#code").fill(code as string);
+  await page.locator("#code").fill(await codeFromMailbox(world, email));
 }
 
 test.describe("recovering a submission", () => {
