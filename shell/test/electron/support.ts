@@ -21,8 +21,10 @@ export async function launchShell(
 ): Promise<Launched> {
   const environment: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
-    // NODE_OPTIONS would be inherited by Electron and can break its start.
-    if (value !== undefined && name !== "NODE_OPTIONS") environment[name] = value;
+    // NODE_OPTIONS and an Electron host's ELECTRON_RUN_AS_NODE would break Electron's start.
+    if (value !== undefined && name !== "NODE_OPTIONS" && name !== "ELECTRON_RUN_AS_NODE") {
+      environment[name] = value;
+    }
   }
   const app = await electron.launch({
     args: ["."],

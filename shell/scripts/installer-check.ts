@@ -217,12 +217,19 @@ try {
   // A silent install may start the app afterwards: stop what it started, by PID.
   for (const pid of processesUnder(installDir)) killTree(pid);
 
+  const launchEnv = Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] =>
+        entry[0] !== "ELECTRON_RUN_AS_NODE" && entry[1] !== undefined,
+    ),
+  );
   for (const colorScheme of ["light", "dark"] as const) {
     log(`Launching the installed app (${colorScheme})`);
     const app = await electron.launch({
       executablePath: exe,
       args: ["--ignore-certificate-errors"],
       colorScheme,
+      env: launchEnv,
     });
     apps.push(app);
     const window = await app.firstWindow();
