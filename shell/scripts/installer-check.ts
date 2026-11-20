@@ -241,7 +241,7 @@ try {
     await window.screenshot({ path: join(screenshots, `home--${colorScheme}.png`) });
 
     await window.getByRole("link", { name: /Munkatársi bejelentkezés/ }).click();
-    await window.waitForURL(`${appUrl}/staff`);
+    await window.waitForURL(`${appUrl}/staff/reports`);
     await window.getByRole("heading", { level: 1 }).waitFor();
     await window.screenshot({ path: join(screenshots, `staff-sign-in--${colorScheme}.png`) });
     await app.close();
