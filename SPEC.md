@@ -717,7 +717,7 @@ the gated screen (§4.4), and every extra PII field is one more thing to keep ou
 
 **Titles use validation, not an encoding wrapper.** After the existing trim/newline normalization, the initial
 allowlist is Unicode letters, combining marks and numbers; ordinary space (`U+0020`); and punctuation
-punctuation `. , ! ? ( ) ' " - – — ‘ ’ “ ” „ ‚ » « …` (the last five are Hungarian typography, added on the
+`. , ! ? ( ) ' " - – — ‘ ’ “ ” „ ‚ » « …` (the last five are Hungarian typography, added on the
 live evidence below). Reject other characters with a catalog error; do not silently strip/replace them.
 Accepted titles are stored unchanged and rendered as plain text in the SPA and emails. They are not fenced.
 Backticks, Markdown delimiters, `@`, `#`, angle brackets, colons, slashes, emoji and control characters are outside
@@ -1313,7 +1313,7 @@ relevant design sections; they are not claims that the application already exist
     The human accepted title-alphabet validation/adjustment during implementation rather than another spike;
     the live evidence proves the tested body/comment properties, not the title policy
     ([Status views, neutralization and failure paths](https://github.com/Pergo911/github-issue-tracker/issues/18)).
-    The title policy was then validated live and its allowlist adjusted (§4.1, ticket #32).
+    The title policy was then live-tested on REST and GraphQL and its allowlist adjusted (§4.1, ticket #32).
 
 ---
 

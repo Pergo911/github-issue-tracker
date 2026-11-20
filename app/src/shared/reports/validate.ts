@@ -10,9 +10,33 @@ export const MAX_DESCRIPTION = 4000;
 export const MAX_PLACE = 100;
 
 /**
- * Unicode letters, combining marks, numbers, the ordinary space and `. , ! ? ( ) ' " - – — ‘ ’ “ ” „ ‚ » « …`.
- * The last five are Hungarian typography; live GitHub renders every one as plain text (SPEC 4.1, ticket #32).
+ * Punctuation marks allowed in a Report title alongside Unicode letters, combining marks, numbers and the
+ * ordinary space. The last five are Hungarian typography; live GitHub renders every one as plain text
+ * (SPEC 4.1, ticket #32). Exported so `scripts/check-titles.ts` probes the exact set the validator allows.
  */
+export const TITLE_ALLOWED_PUNCTUATION = [
+  ".",
+  ",",
+  "!",
+  "?",
+  "(",
+  ")",
+  "'",
+  '"',
+  "-",
+  "–",
+  "—",
+  "‘",
+  "’",
+  "“",
+  "”",
+  "„",
+  "‚",
+  "»",
+  "«",
+  "…",
+] as const;
+
 export const TITLE_ALPHABET = /^[\p{L}\p{M}\p{N} .,!?()'"\-–—‘’“”„‚»«…]*$/u;
 
 export const FIELD_ERRORS = [

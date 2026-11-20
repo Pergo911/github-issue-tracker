@@ -5,7 +5,12 @@
 // plain text, did the issue's timeline grow a `mentioned` or `cross-referenced` event. Every issue it creates is
 // closed as `not_planned` at the end. Credentials: the same as the live contract suite (AGENTS.md).
 import { writeFileSync } from "node:fs";
-import { MAX_TITLE, MIN_TITLE, TITLE_ALPHABET } from "../src/shared/reports/validate.ts";
+import {
+  MAX_TITLE,
+  MIN_TITLE,
+  TITLE_ALLOWED_PUNCTUATION,
+  TITLE_ALPHABET,
+} from "../src/shared/reports/validate.ts";
 import { liveCredentials, liveTarget } from "../fakes/node/contract/target.ts";
 
 process.env["CONTRACT_LIVE"] = "1";
@@ -22,24 +27,6 @@ interface Candidate {
   title: string;
 }
 
-const ALLOWED_PUNCTUATION = [
-  ".",
-  ",",
-  "!",
-  "?",
-  "(",
-  ")",
-  "'",
-  '"',
-  "-",
-  "–",
-  "—",
-  "‘",
-  "’",
-  "“",
-  "”",
-];
-
 const candidates: Candidate[] = [
   // Everything the validator allows, and the shapes the ticket names.
   { group: "hungarian", title: "Árvíztűrő tükörfúrógép ÁÉÍÓÖŐÚÜŰ áéíóöőúüű" },
@@ -54,7 +41,10 @@ const candidates: Candidate[] = [
   { group: "digits", title: "1-2-3" },
   { group: "digits", title: "2026" },
   { group: "digits", title: "42 42 42" },
-  ...ALLOWED_PUNCTUATION.map((mark) => ({ group: "punctuation", title: `Hiba ${mark} jelzés` })),
+  ...TITLE_ALLOWED_PUNCTUATION.map((mark) => ({
+    group: "punctuation",
+    title: `Hiba ${mark} jelzés`,
+  })),
   { group: "punctuation", title: "Hiba?! (nagyon) — tényleg – „idézet” és ‘más’" },
   { group: "punctuation", title: "- első elem" },
   { group: "punctuation", title: "--- vonal" },
@@ -71,6 +61,10 @@ const candidates: Candidate[] = [
   { group: "domain-like", title: "kiss.anna.example.hu" },
   { group: "domain-like", title: "anna.kiss.example" },
   { group: "hex", title: "da39a3ee5e6b4b0d3255bfef95601890afd80709" },
+  {
+    group: "hex",
+    title: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  },
   { group: "hex", title: "da39a3e" },
   { group: "hex", title: "a1b2c3d4" },
   { group: "hex", title: "deadbeef" },

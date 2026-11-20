@@ -97,7 +97,7 @@ export async function fakeTarget(): Promise<ContractTarget & { world: TestWorld 
       }),
     web: (method, path, form) => world.client.web(method, path, { form }),
     signJwt: (claims = {}) => signWith(world.keys.privateKeyPkcs8, TEST_BOT.appId, claims),
-    botToken: async () => cast.bot,
+    botToken: () => Promise.resolve(cast.bot),
     operatorToken: () => cast.admin,
     path: (suffix = "") => `/repos/${world.org}/${world.repo}${suffix}`,
   };
@@ -221,7 +221,8 @@ export function liveTarget(credentials: LiveCredentials): ContractTarget {
       });
       if (reply.status !== 201)
         throw new Error(`installation token exchange failed: ${reply.text}`);
-      return reply.json.token as string;
+      const { token } = reply.json as { token: string };
+      return token;
     },
     operatorToken: () => operatorToken,
     path: (suffix = "") => `/repos/${org}/${SANDBOX_REPO}${suffix}`,

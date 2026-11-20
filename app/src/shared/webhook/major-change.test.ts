@@ -64,6 +64,16 @@ const cases: Case[] = [
     expected: { kind: "ignore", why: "bot" },
   },
   {
+    name: "a closed delivery arriving after the Report was already reopened",
+    event: payload("closed", { state: "open", reason: "completed" }),
+    expected: { kind: "ignore", why: "stale-state" },
+  },
+  {
+    name: "a reopened delivery arriving after the Report was closed again",
+    event: payload("reopened", { state: "closed" }),
+    expected: { kind: "ignore", why: "stale-state" },
+  },
+  {
     name: "a Status entered while the Report is closed",
     event: payload("labeled", { state: "closed", label: "status:in-progress" }),
     expected: { kind: "ignore", why: "stale-status" },

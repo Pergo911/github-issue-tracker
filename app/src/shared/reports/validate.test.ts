@@ -5,6 +5,7 @@ import {
   MAX_PLACE,
   MAX_TITLE,
   MIN_TITLE,
+  TITLE_ALLOWED_PUNCTUATION,
   TITLE_ALPHABET,
   normalizeEmail,
   normalizeTitle,
@@ -114,6 +115,9 @@ describe("validating the form fields", () => {
       "Várjuk… sokáig",
     ]) {
       expect(error({ title: good }), good).toBeNull();
+    }
+    for (const mark of TITLE_ALLOWED_PUNCTUATION) {
+      expect(error({ title: `Hiba ${mark} jelzés` }), mark).toBeNull();
     }
   });
 
