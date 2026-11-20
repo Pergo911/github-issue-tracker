@@ -116,7 +116,7 @@ test("navigation inside the app's origin still works", async () => {
     .getByRole("link", { name: /staff|munkatárs|karbantart/i })
     .first()
     .click();
-  await expect(launched.window).toHaveURL(`${appUrl()}/staff`);
+  await expect(launched.window).toHaveURL(`${appUrl()}/staff/reports`);
 });
 
 test("a server redirect off the origin is blocked too", async () => {
