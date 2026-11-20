@@ -1,7 +1,7 @@
 // Install the real Deployment build, capture it, then uninstall only what this run installed.
 // Unlike installer-check.ts this uses the live HTTPS origin, with no certificate override or dev server.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { _electron as electron, type ElectronApplication } from "@playwright/test";
 
@@ -17,24 +17,30 @@ const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 };
 const setup = join(root, "dist", `${product}-Setup-${version}.exe`);
 if (!existsSync(setup)) throw new Error("Build the live installer first");
-const registry = spawnSync(
-  "reg",
-  [
-    "query",
-    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-    "/s",
-    "/f",
-    product,
-    "/d",
-  ],
-  { encoding: "utf8" },
-);
-if (registry.status === 0 && registry.stdout.includes(product))
-  throw new Error(`${product} is already installed; refusing to replace it`);
+
+function hasUninstallEntry(): boolean {
+  const registry = spawnSync(
+    "reg",
+    [
+      "query",
+      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+      "/s",
+      "/f",
+      product,
+      "/d",
+    ],
+    { encoding: "utf8" },
+  );
+  return registry.status === 0 && registry.stdout.includes(product);
+}
+
+if (hasUninstallEntry()) throw new Error(`${product} is already installed; refusing to replace it`);
 const directory = join(root, ".tmp", `live-install-${process.pid}-${Date.now()}`);
 const screenshots = join(root, ".screenshots", "live-installed");
 mkdirSync(screenshots, { recursive: true });
 let app: ElectronApplication | undefined;
+let installed = false;
+let failure: unknown;
 
 function stopInstalled() {
   const result = spawnSync(
@@ -53,15 +59,24 @@ function stopInstalled() {
 
 try {
   console.log("Installing the live Deployment build silently.");
-  const installed = spawnSync(setup, ["/S", `/D=${directory}`], { stdio: "inherit" });
-  if (installed.status !== 0) throw new Error("Installer failed");
+  installed = true;
+  const result = spawnSync(setup, ["/S", `/D=${directory}`], { stdio: "inherit" });
+  if (result.status !== 0) throw new Error("Installer failed");
   stopInstalled();
   // Electron-based agent hosts may export this for their subprocesses. A real desktop launch
   // does not inherit it: it would run the installed application as Node rather than open a window.
-  const environment = { ...process.env };
-  delete environment["ELECTRON_RUN_AS_NODE"];
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] =>
+        entry[0] !== "ELECTRON_RUN_AS_NODE" && entry[1] !== undefined,
+    ),
+  );
   for (const colorScheme of ["light", "dark"] as const) {
-    app = await electron.launch({ executablePath: join(directory, `${product}.exe`), colorScheme, env: environment });
+    app = await electron.launch({
+      executablePath: join(directory, `${product}.exe`),
+      colorScheme,
+      env: environment,
+    });
     const window = await app.firstWindow();
     await window.getByRole("heading", { level: 1 }).waitFor();
     await window.waitForLoadState("networkidle");
@@ -74,13 +89,35 @@ try {
     app = undefined;
   }
   console.log(`Live installed app captured in ${screenshots}.`);
+} catch (error) {
+  failure = error;
 } finally {
   await app?.close().catch(() => {});
-  stopInstalled();
-  const uninstaller = join(directory, `Uninstall ${product}.exe`);
-  if (existsSync(uninstaller)) {
-    const removed = spawnSync(uninstaller, ["/currentuser", "/S", `_?=${directory}`], { stdio: "inherit" });
-    if (removed.status !== 0 || existsSync(join(directory, `${product}.exe`)))
-      throw new Error("Uninstall did not complete");
+  if (installed) {
+    stopInstalled();
+    const uninstaller = join(directory, `Uninstall ${product}.exe`);
+    if (existsSync(uninstaller)) {
+      const removed = spawnSync(uninstaller, ["/currentuser", "/S", `_?=${directory}`], {
+        stdio: "inherit",
+      });
+      if (removed.status !== 0) failure ??= new Error("Uninstaller exited non-zero");
+    }
+    const exeLeft = existsSync(join(directory, `${product}.exe`));
+    const entryLeft = hasUninstallEntry();
+    if (exeLeft || entryLeft) {
+      failure ??= new Error(
+        `Uninstall left things behind: exe=${exeLeft}, registry entry=${entryLeft}`,
+      );
+    }
   }
+  try {
+    rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
+  } catch {
+    console.warn(`Could not remove ${directory}; delete it by hand.`);
+  }
+}
+
+if (failure) {
+  console.error(failure instanceof Error ? failure.message : failure);
+  process.exit(1);
 }

@@ -4,7 +4,9 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { parseDevVars } from "../fakes/node/local-world.ts";
+import { endpoints } from "../src/shared/api/endpoints.ts";
 import { referenceConfig } from "../src/shared/seed/reference-config.ts";
 
 const directory =
@@ -73,10 +75,23 @@ async function main() {
     execFileSync("gh", ["api", "--method", "POST", `repos/${repo}/hooks/${result.id}/pings`], {
       stdio: "ignore",
     });
-    console.log(`Webhook ${result.id} configured for issues only; ping requested.`);
+    let pingCode: number | null = null;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await delay(2_000);
+      const hook = JSON.parse(
+        execFileSync("gh", ["api", `repos/${repo}/hooks/${result.id}`], { encoding: "utf8" }),
+      ) as { last_response?: { code?: number | null } };
+      pingCode = hook.last_response?.code ?? null;
+      if (pingCode !== null && pingCode >= 200 && pingCode < 300) break;
+    }
+    if (pingCode === null || pingCode < 200 || pingCode >= 300) {
+      throw new Error(`Webhook ${result.id} ping did not succeed (last_response.code=${pingCode})`);
+    }
+    console.log(`Webhook ${result.id} configured for issues only; ping answered HTTP ${pingCode}.`);
   } else if (command === "configure") {
     const token =
       process.env["GITHUB_TOKEN"] ??
+      process.env["GH_TOKEN"] ??
       execFileSync("gh", ["auth", "token"], { encoding: "utf8" }).trim();
     const config = {
       ...referenceConfig,
@@ -85,8 +100,8 @@ async function main() {
         replyTo: process.env["REPLY_TO"] ?? "reply@mail.berautoapp.hu",
       },
     };
-    const response = await fetch(`${appUrl}/api/staff/config`, {
-      method: "PUT",
+    const response = await fetch(`${appUrl}${endpoints.configSave.path}`, {
+      method: endpoints.configSave.method,
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ config }),
       signal: AbortSignal.timeout(60_000),

@@ -156,11 +156,16 @@ node scripts/install-live.ts
 installed packaged app (no certificate bypass), captures light/dark home screenshots under
 `shell/.screenshots/live-installed/`, and uninstalls. It refuses to replace an existing installation.
 Open both images. For the reference Deployment use the default identity: leave `APP_ID` and
-`PRODUCT_NAME` unset. Upload the installer, portable executable, and screenshots to a draft release:
+`PRODUCT_NAME` unset (producing `Hibabejelento-Setup-0.1.0.exe` and `Hibabejelento-0.1.0-portable.exe`).
+Upload the installer, portable executable, and screenshots to a draft release:
 
 ```powershell
-gh release create reference-mvp-0.1.0 --repo Pergo911/github-issue-tracker --draft --title 'Reference Deployment MVP' --notes 'Windows app for https://fault-reports.berautoapp.workers.dev. Unsigned; see the deployment runbook.'
-gh release upload reference-mvp-0.1.0 --repo Pergo911/github-issue-tracker 'dist/Hibabejelento-Setup-0.1.0.exe' 'dist/Hibabejelento-0.1.0-portable.exe'
+$tag = 'reference-mvp-0.1.0'
+$releaseRepo = '<owner>/<repo>' # reference Deployment: Pergo911/github-issue-tracker
+$product = if ($env:PRODUCT_NAME) { $env:PRODUCT_NAME } else { 'Hibabejelento' }
+
+gh release create $tag --repo $releaseRepo --draft --title 'Reference Deployment MVP' --notes "Windows app for $env:APP_URL. Unsigned; see the deployment runbook."
+gh release upload $tag --repo $releaseRepo "dist/$product-Setup-0.1.0.exe" "dist/$product-0.1.0-portable.exe" (Get-ChildItem ../app/.screenshots/live/*.png).FullName (Get-ChildItem .screenshots/live-installed/*.png).FullName
 ```
 
 Finally ask the operator to complete [setup ticket #20 Part B](https://github.com/Pergo911/github-issue-tracker/issues/20):

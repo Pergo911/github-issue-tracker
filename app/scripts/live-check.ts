@@ -40,9 +40,11 @@ interface Journal {
   repo: string;
   email: string;
   credential: string;
+  phase?: "uncertain";
   number?: number;
   nodeId?: string;
   statusUrl?: string;
+  statusUrls?: string[];
   allowlistAdded: boolean;
 }
 let journal: Journal = {
@@ -51,9 +53,18 @@ let journal: Journal = {
   repo,
   email,
   credential: randomBytes(16).toString("base64url"),
+  statusUrls: [],
   allowlistAdded: false,
 };
 const save = () => writeFileSync(journalPath, JSON.stringify(journal), { mode: 0o600 });
+
+class HttpStatusError extends Error {
+  readonly status: number;
+  constructor(path: string, status: number) {
+    super(`${path} answered HTTP ${status}`);
+    this.status = status;
+  }
+}
 
 async function http<T>(
   base: string,
@@ -92,7 +103,7 @@ async function api<T>(
     query ? undefined : body,
     staff ? operator : undefined,
   );
-  if (status < 200 || status >= 300) throw new Error(`${endpoint.path} answered HTTP ${status}`);
+  if (status < 200 || status >= 300) throw new HttpStatusError(endpoint.path, status);
   return data;
 }
 
@@ -137,22 +148,27 @@ async function listMail(): Promise<Mail[]> {
   return mails;
 }
 
-async function mailAfter(before: Set<string>, subject: (value: string) => boolean): Promise<Mail> {
+async function mailAfter(seen: Set<string>, match: (mail: Mail) => boolean): Promise<Mail> {
   return until("Resend message", async () => {
-    const mail = (await listMail()).find(
-      (item) => !before.has(item.id) && item.to.includes(email) && subject(item.subject),
+    const candidates = (await listMail()).filter(
+      (item) => !seen.has(item.id) && item.to.includes(email),
     );
-    if (!mail) return null;
-    await delay(600);
-    const { status, data } = await http<Mail>(
-      resendBase,
-      `/emails/${mail.id}`,
-      "GET",
-      undefined,
-      resendKey,
-    );
-    if (status !== 200) throw new Error(`Resend retrieve answered HTTP ${status}`);
-    return data;
+    for (const candidate of candidates) {
+      await delay(600);
+      const { status, data } = await http<Mail>(
+        resendBase,
+        `/emails/${candidate.id}`,
+        "GET",
+        undefined,
+        resendKey,
+      );
+      if (status !== 200) throw new Error(`Resend retrieve answered HTTP ${status}`);
+      if (match(data)) {
+        seen.add(data.id);
+        return data;
+      }
+    }
+    return null;
   });
 }
 
@@ -189,7 +205,13 @@ async function erase() {
       { issueNumber: journal.number },
       operator,
     );
-    const gone = !journal.statusUrl || (await statusIs(tokenOf(journal.statusUrl), 404));
+    const urls = [
+      ...new Set([
+        ...(journal.statusUrls ?? []),
+        ...(journal.statusUrl ? [journal.statusUrl] : []),
+      ]),
+    ];
+    const gone = (await Promise.all(urls.map((url) => statusIs(tokenOf(url), 404)))).every(Boolean);
     return contact.status === 404 && gone ? true : null;
   });
   console.log(`Report #${journal.number} deleted; contact and Status link no longer resolve.`);
@@ -197,11 +219,13 @@ async function erase() {
 
 async function cleanup() {
   // Do not stop Allowlist cleanup if erasure failed. Preserve the journal for an explicit --cleanup retry.
-  let failure: unknown;
+  const asError = (error: unknown) =>
+    error instanceof Error ? error : new Error("Cleanup failed");
+  let failure: Error | undefined;
   try {
     await erase();
   } catch (error) {
-    failure = error;
+    failure = asError(error);
   }
   if (journal.allowlistAdded) {
     try {
@@ -217,12 +241,12 @@ async function cleanup() {
       journal.allowlistAdded = false;
       save();
     } catch (error) {
-      failure ??= error;
+      failure ??= asError(error);
     }
   }
   if (failure) throw failure;
   // An uncertain submission must be inspected through recovery, never blindly resubmitted or discarded.
-  if (!journal.number && journal.statusUrl === "pending")
+  if (!journal.number && journal.phase === "uncertain")
     throw new Error(
       "Submission outcome uncertain: inspect recovery before removing the private journal",
     );
@@ -246,8 +270,9 @@ async function capture(context: BrowserContext, name: string, path: string) {
   }
 }
 
-async function captureSite(statusUrl: string, number: number) {
+async function captureSite(config: PublicConfig, statusUrl: string, number: number) {
   mkdirSync(screenshots, { recursive: true });
+  const locale = config.language === "hu" ? "hu-HU" : "en-US";
   const browser = await chromium.launch();
   try {
     for (const colorScheme of ["light", "dark"] as const) {
@@ -256,8 +281,8 @@ async function captureSite(statusUrl: string, number: number) {
         const context = await browser.newContext({
           viewport: { width, height: 900 },
           colorScheme,
-          locale: "hu-HU",
-          timezoneId: "Europe/Budapest",
+          locale,
+          timezoneId: config.timezone,
         });
         try {
           await capture(context, `home--${suffix}`, "/");
@@ -318,8 +343,6 @@ async function main() {
     return;
   }
   const config = await api<PublicConfig>(endpoints.publicConfig);
-  if (config.language !== "hu" || config.timezone !== "Europe/Budapest")
-    throw new Error("Expected Hungarian / Europe/Budapest configuration");
   const { entries } = await api<{ entries: { email: string }[] }>(
     endpoints.allowlistList,
     undefined,
@@ -327,7 +350,7 @@ async function main() {
   );
   if (entries.some((entry) => entry.email === email))
     throw new Error("Live-check address is already listed; refusing to overwrite existing data");
-  const before = new Set((await listMail()).map((mail) => mail.id));
+  const seen = new Set((await listMail()).map((mail) => mail.id));
   save();
   try {
     await api(endpoints.allowlistAdd, { email, note: "Temporary live deployment check" }, true);
@@ -337,28 +360,37 @@ async function main() {
     console.log("Allowlist added; waiting 65 seconds for KV propagation.");
     await delay(65_000);
     await api(endpoints.requestCode, { email });
-    const otpMail = await mailAfter(
-      before,
-      (subject) => subject === "Ellenőrző kód a hibabejelentéshez",
-    );
+    const otpMail = await mailAfter(seen, (mail) => /\b\d{6}\b/.test(mail.text ?? ""));
     const code = /\b(\d{6})\b/.exec(otpMail.text ?? "")?.[1];
     if (!code) throw new Error("OTP was not found in the retrieved email");
-    journal.statusUrl = "pending";
+    journal.phase = "uncertain";
     save();
-    const submitted = await api<{ number: number; title: string; statusUrl: string }>(
-      endpoints.submitReport,
-      {
-        email,
-        code,
-        credential: journal.credential,
-        category: config.taxonomy.category[0]?.id,
-        location: config.taxonomy.location[0]?.id,
-        title: `Live deployment check ${Date.now()}`,
-        description: "Éles telepítési ellenőrzés. A bejelentést az ellenőrzés végén töröljük.",
-      },
-    );
+    let submitted: { number: number; title: string; statusUrl: string };
+    try {
+      submitted = await api<{ number: number; title: string; statusUrl: string }>(
+        endpoints.submitReport,
+        {
+          email,
+          code,
+          credential: journal.credential,
+          category: config.taxonomy.category[0]?.id,
+          location: config.taxonomy.location[0]?.id,
+          title: `Live deployment check ${Date.now()}`,
+          description: "Éles telepítési ellenőrzés. A bejelentést az ellenőrzés végén töröljük.",
+        },
+      );
+    } catch (error) {
+      // A definite 4xx refusal never created an issue, so cleanup can safely remove the journal.
+      if (error instanceof HttpStatusError && error.status >= 400 && error.status < 500) {
+        delete journal.phase;
+        save();
+      }
+      throw error;
+    }
+    delete journal.phase;
     journal.number = submitted.number;
     journal.statusUrl = submitted.statusUrl;
+    journal.statusUrls = [...(journal.statusUrls ?? []), submitted.statusUrl];
     save();
     const issue = await http<{
       node_id: string;
@@ -378,13 +410,15 @@ async function main() {
     });
     console.log(`Report #${submitted.number} created and Reporter comment accepted.`);
     const confirm = await mailAfter(
-      before,
-      (subject) => subject.includes(`#${submitted.number}`) && subject.endsWith("beérkezett"),
+      seen,
+      (mail) =>
+        mail.subject.includes(`#${submitted.number}`) &&
+        (mail.text?.includes(submitted.statusUrl) ?? false),
     );
     if (!confirm.text?.includes(submitted.statusUrl))
       throw new Error("Confirmation email lacks the Status link");
     if (process.argv.includes("--screenshots"))
-      await captureSite(submitted.statusUrl, submitted.number);
+      await captureSite(config, submitted.statusUrl, submitted.number);
     // Let the webhook's region observe the contact mapping before closing (notifications are best-effort).
     await delay(65_000);
     const closed = await http(
@@ -402,17 +436,15 @@ async function main() {
       operator,
     );
     if (closed.status !== 200) throw new Error(`Close answered HTTP ${closed.status}`);
-    await mailAfter(
-      before,
-      (subject) => subject.includes(`#${submitted.number}`) && subject.endsWith("lezárva"),
-    );
+    await mailAfter(seen, (mail) => mail.subject.includes(`#${submitted.number}`));
     console.log("Closed email retrieved through Resend.");
     await api(endpoints.staffReissue, { issueNumber: submitted.number }, true);
-    const reissued = await mailAfter(
-      before,
-      (subject) => subject.includes(`#${submitted.number}`) && subject.endsWith("új hivatkozás"),
-    );
-    const nextUrl = reissued.text?.match(/https?:\/\/[^\s]+\/status\/[A-Za-z0-9_-]+/)?.[0];
+    const linkPattern = /https?:\/\/[^\s]+\/status\/[A-Za-z0-9_-]+/;
+    const reissued = await mailAfter(seen, (mail) => {
+      const link = mail.text?.match(linkPattern)?.[0];
+      return Boolean(link && link !== submitted.statusUrl);
+    });
+    const nextUrl = reissued.text?.match(linkPattern)?.[0];
     if (
       !nextUrl ||
       new URL(nextUrl).origin !== new URL(appUrl).origin ||
@@ -420,6 +452,7 @@ async function main() {
     )
       throw new Error("Reissue email lacks a new Status link");
     journal.statusUrl = nextUrl;
+    journal.statusUrls = [...(journal.statusUrls ?? []), nextUrl];
     save();
     await until("old link revoked and new link usable", async () =>
       (await statusIs(token, 404)) && (await statusIs(tokenOf(nextUrl), 200)) ? true : null,
