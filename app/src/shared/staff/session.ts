@@ -36,6 +36,6 @@ export interface StaffMeta {
   login: string;
   /** Where the Reports live: the SPA's calls to GitHub need it, and it is never on a public endpoint. */
   repo: { owner: string; name: string };
-  /** The Bot that opens Reports and posts Reporter comments (attribution needs login, id and `Bot`). */
-  bot: { login: string; id: number; type: "Bot" };
+  /** The Bot that opens Reports and posts Reporter comments (attribution needs login, id, `Bot`, and optional appId). */
+  bot: { login: string; id: number; type: "Bot"; appId?: number };
 }

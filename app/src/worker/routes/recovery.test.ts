@@ -345,6 +345,10 @@ describe("repairing a known issue", () => {
     expect(await env.KV.get("issue-email:1")).toBe(listed);
     expect(await attemptOf(listed)).toBeUndefined();
     expect(await receiptCount(listed)).toBe(1);
+    const confirmation = fakeWorld()
+      .control.outbox(listed)
+      .find((mail) => mail.subject.includes("#1"));
+    expect(confirmation?.text).toContain(`/status/${await env.KV.get("issue-token:1")}`);
   });
 
   it("does not write mappings for an issue that was deleted before the retry", async () => {
@@ -369,7 +373,7 @@ describe("repairing a known issue", () => {
     expect(view?.state).toBe("deleted");
   });
 
-  it("keeps a Reissue's token when it races the repair, and its receipt never reveals the old one", async () => {
+  it("keeps a Reissue's token when it races the repair, and its receipt never reveals the successor token", async () => {
     fakeWorld().control.holdWebhooks();
     const real = kvWriter.put;
     let reissued = false;
@@ -387,13 +391,9 @@ describe("repairing a known issue", () => {
     await post("resume", { email: listed, credential });
     expect(await env.KV.get("issue-token:1")).toBe("N".repeat(22));
     expect(await env.KV.get(`status-token:${"N".repeat(22)}`)).toBe("1");
-    // The receipt carries the current token, never the one the Reissue replaced
-    const resumed = await post("resume", { email: listed, credential });
-    expect(resumed.body["statusUrl"]).toBe(`https://reports.test/status/${"N".repeat(22)}`);
     const stale = (await env.KV.list({ prefix: "status-token:" })).keys.map((key) => key.name);
     expect(stale).toEqual([`status-token:${"N".repeat(22)}`]);
-    // A later Reissue voids the receipt: it reveals nothing
-    await env.REPORT_GATE.getByName("1").reissue("M".repeat(22));
+    // SPEC 4.1: a receipt never exposes a successor token after Reissue, even one that raced repair.
     expect((await post("resume", { email: listed, credential })).status).toBe(404);
     expect((await post("submit", request)).status).toBe(404);
   });

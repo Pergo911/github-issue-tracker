@@ -48,14 +48,14 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
     const config = await loadConfig(env.KV);
     if (config === null) return fail("not_configured");
 
-    // 1. The Deployment-wide budget, awaited on every request first: its 429 never depends on membership,
+    // 1. The per-IP burst, checked before the Deployment-wide budget so one noisy IP cannot burn it.
+    if (!(await env.RL_OTP_REQUEST_IP.limit({ key: clientKey(env, request) })).success) {
+      return fail("rate_limited");
+    }
+    // 2. The Deployment-wide budget, awaited before the Allowlist read: its 429 never depends on membership,
     //    and no per-email state has been touched yet.
     const now = Date.now();
     if (!(await env.GLOBAL_GATE.getByName("deployment").take(config.dailyCodeBudget, now))) {
-      return fail("rate_limited");
-    }
-    // 2. The per-IP burst.
-    if (!(await env.RL_OTP_REQUEST_IP.limit({ key: clientKey(env, request) })).success) {
       return fail("rate_limited");
     }
     // 3. The Allowlist read. Only a listed address does any per-email work, and that runs after the response.
@@ -181,18 +181,20 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
       return fail("submission_pending");
     }
     if (finished.kind !== "complete") return fail("submission_pending");
+    const token = await currentToken(env, finished.receipt);
+    if (token === null) return fail("not_found");
 
     // Best effort: a failed confirmation is logged and never undoes completion.
     try {
       await sendTemplate(env, config, "submissionConfirmation", email, {
         number: issueNumber,
         title: fields.title,
-        link: statusUrl(statusToken),
+        link: statusUrl(token),
       });
     } catch (error) {
       console.error("the confirmation email could not be sent", error);
     }
-    return { number: issueNumber, title: fields.title, statusUrl: statusUrl(statusToken) };
+    return { number: issueNumber, title: fields.title, statusUrl: statusUrl(token) };
   });
 
   registerEndpoint(app, endpoints.resumeSubmission, async ({ env, input, request, fail }) => {

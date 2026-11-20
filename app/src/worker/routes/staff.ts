@@ -137,7 +137,7 @@ export function registerStaff(app: Hono<{ Bindings: Env }>): void {
       role: caller.role,
       login: caller.login,
       repo: { owner: env.GITHUB_ORG, name: env.GITHUB_REPO },
-      bot,
+      bot: { ...bot, appId: Number(env.BOT_APP_ID) },
     };
   });
 }
