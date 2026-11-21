@@ -67,6 +67,7 @@ function openWindow(target) {
     height: 800,
     minWidth: 360,
     minHeight: 480,
+    icon: path.join(__dirname, "..", "assets", "icon.ico"),
     show: false,
     webPreferences,
   });
