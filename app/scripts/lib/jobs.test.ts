@@ -4,6 +4,7 @@ import {
   defaultPlaywrightWorkers,
   hasWorkersFlag,
   jobLimit,
+  playwrightWorkerArgs,
   playwrightWorkers,
 } from "./jobs.ts";
 
@@ -85,5 +86,19 @@ describe("hasWorkersFlag", () => {
   it("ignores unrelated flags", () => {
     expect(hasWorkersFlag([])).toBe(false);
     expect(hasWorkersFlag(["-g", "home", "--shard=1/2"])).toBe(false);
+  });
+});
+
+describe("playwrightWorkerArgs", () => {
+  it("adds --workers from the env var or CPU default when no worker flag was passed", () => {
+    expect(playwrightWorkerArgs("E2E_WORKERS", [], {}, 2)).toEqual(["--workers=2"]);
+    expect(playwrightWorkerArgs("E2E_WORKERS", ["-g", "home"], { E2E_WORKERS: "3" }, 22)).toEqual([
+      "--workers=3",
+    ]);
+  });
+
+  it("omits --workers when the caller already passed one", () => {
+    expect(playwrightWorkerArgs("E2E_WORKERS", ["--workers=1"], {}, 22)).toEqual([]);
+    expect(playwrightWorkerArgs("VISUAL_WORKERS", ["-j", "1"], {}, 22)).toEqual([]);
   });
 });

@@ -8,7 +8,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { COLOR_SCHEMES, screens, VIEWPORTS } from "../e2e/screens.ts";
-import { hasWorkersFlag, machinePlaywrightWorkers } from "./lib/jobs.ts";
+import { playwrightWorkerArgs } from "./lib/jobs.ts";
 import { prepareRun, runPlaywright } from "./lib/run.ts";
 import { APP_ROOT } from "./lib/state.ts";
 
@@ -42,18 +42,13 @@ ${sections}</body></html>`;
 }
 
 const requested = process.argv.slice(2);
-const workers = machinePlaywrightWorkers("VISUAL_WORKERS");
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
 const run = await prepareRun(["seeded", "empty"]);
 let code: number;
 try {
   code = await runPlaywright(
-    [
-      "--project=screenshots",
-      ...(hasWorkersFlag(requested) ? [] : [`--workers=${workers}`]),
-      ...requested,
-    ],
+    ["--project=screenshots", ...playwrightWorkerArgs("VISUAL_WORKERS", requested), ...requested],
     {
       ...run.env,
       SCREENSHOT_DIR: output,

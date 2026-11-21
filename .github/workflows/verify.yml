@@ -37,13 +37,15 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
+      # Cache ESLint on PRs only so pushes to main always run a full uncached type-checked lint pass.
       - name: Cache ESLint results
+        if: github.event_name == 'pull_request'
         uses: actions/cache@v6
         with:
           path: app/.eslintcache
-          key: eslint-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/eslint.config.js', 'app/eslint-rules/**') }}-${{ github.sha }}
+          key: eslint-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/eslint.config.js', 'app/eslint-rules/**', 'app/tsconfig*.json') }}-${{ github.sha }}
           restore-keys: |
-            eslint-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/eslint.config.js', 'app/eslint-rules/**') }}-
+            eslint-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/eslint.config.js', 'app/eslint-rules/**', 'app/tsconfig*.json') }}-
 
       - run: npm ci
 
@@ -106,7 +108,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.tmp/vite-cache-e2e
-          key: vite-cache-e2e-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/vite.config.ts') }}
+          key: vite-cache-e2e-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/vite.config.ts') }}-${{ github.sha }}
+          restore-keys: |
+            vite-cache-e2e-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/vite.config.ts') }}-
 
       - name: Run end-to-end suite (shard ${{ matrix.shard }}/2)
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/2
@@ -116,7 +120,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: verify-e2e-shard-${{ matrix.shard }}-failure
-          path: app/.tmp/run-*
+          path: app/.tmp/e2e-results
           if-no-files-found: ignore
           retention-days: 7
 
@@ -149,7 +153,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.tmp/vite-cache-e2e
-          key: vite-cache-e2e-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/vite.config.ts') }}
+          key: vite-cache-e2e-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/vite.config.ts') }}-${{ github.sha }}
+          restore-keys: |
+            vite-cache-e2e-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/vite.config.ts') }}-
 
       - name: Run visual reference comparison (shard ${{ matrix.shard }}/2)
         env:

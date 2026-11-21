@@ -21,7 +21,7 @@ import {
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative } from "node:path";
 import { randomBytes } from "node:crypto";
-import { hasWorkersFlag, machinePlaywrightWorkers } from "./lib/jobs.ts";
+import { playwrightWorkerArgs } from "./lib/jobs.ts";
 import { prepareRun, runPlaywright } from "./lib/run.ts";
 import { APP_ROOT } from "./lib/state.ts";
 
@@ -31,8 +31,7 @@ const inContainer =
 const extra = process.argv
   .slice(2)
   .filter((argument) => argument !== "--update" && argument !== "--no-docker");
-const workers = machinePlaywrightWorkers("VISUAL_WORKERS");
-const workerArgs = hasWorkersFlag(extra) ? [] : [`--workers=${workers}`];
+const workerArgs = playwrightWorkerArgs("VISUAL_WORKERS", extra);
 
 const require = createRequire(import.meta.url);
 const { version } = require("@playwright/test/package.json") as { version: string };

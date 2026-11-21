@@ -1,6 +1,6 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { referenceConfig } from "../src/shared/seed/reference-config.ts";
-import { waitForVisualSettle } from "./support/axe.ts";
+import { waitForVisualSettle } from "./support/settle.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { urlFor, type ServerKind } from "./support/servers.ts";
 import { adminScreens } from "./admin-screens.ts";
@@ -472,21 +472,15 @@ export async function visitScreenVariants(
   try {
     for (const [viewportIndex, viewport] of VIEWPORTS.entries()) {
       const reopen = viewportIndex === 0 || screen.freshOnViewport === true;
-      if (reopen) {
-        if (viewportIndex > 0) {
-          extraPage = await context.newPage();
-          current = extraPage;
-        }
-        await current.setViewportSize({ width: viewport.width, height: viewport.height });
-        await current.emulateMedia({ colorScheme: COLOR_SCHEMES[0] });
-        await openScreen(current, screen);
-        await current.mouse.move(-1, -1);
-      } else {
-        await current.setViewportSize({ width: viewport.width, height: viewport.height });
-        await current.emulateMedia({ colorScheme: COLOR_SCHEMES[0] });
-        await current.mouse.move(-1, -1);
-        await waitForVisualSettle(current);
+      if (reopen && viewportIndex > 0) {
+        extraPage = await context.newPage();
+        current = extraPage;
       }
+      await current.setViewportSize({ width: viewport.width, height: viewport.height });
+      await current.emulateMedia({ colorScheme: COLOR_SCHEMES[0] });
+      if (reopen) await openScreen(current, screen);
+      await current.mouse.move(-1, -1);
+      if (!reopen) await waitForVisualSettle(current);
       for (const [schemeIndex, scheme] of COLOR_SCHEMES.entries()) {
         if (schemeIndex > 0) {
           await current.emulateMedia({ colorScheme: scheme });

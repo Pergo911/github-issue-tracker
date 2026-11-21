@@ -18,7 +18,12 @@ const alias = {
   "@": resolve(import.meta.dirname, "src/client"),
 };
 
-/** True unless `--project` was passed and explicitly excluded `worker`. */
+const NON_WORKER_PROJECTS = new Set(["unit", "tooling"]);
+
+/**
+ * False only when every `--project` flag names a known non-worker project (`unit` or `tooling`), so globs,
+ * negations (`!unit`) and unfiltered `vitest run` always load the Worker project.
+ */
 function needsWorkerProject(argv: readonly string[]): boolean {
   const selected: string[] = [];
   for (let index = 0; index < argv.length; index++) {
@@ -29,7 +34,7 @@ function needsWorkerProject(argv: readonly string[]): boolean {
       selected.push(argument.slice("--project=".length));
     }
   }
-  return selected.length === 0 || selected.includes("worker");
+  return selected.length === 0 || !selected.every((name) => NON_WORKER_PROJECTS.has(name));
 }
 
 async function workerProject() {
