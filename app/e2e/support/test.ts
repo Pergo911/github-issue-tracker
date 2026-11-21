@@ -1,6 +1,6 @@
 import { expect, test as base } from "@playwright/test";
 import { remoteControl, type AsyncControl } from "../../fakes/control.ts";
-import { controlUrl, SERVER_KINDS, type ServerKind } from "./servers.ts";
+import { activeServerKinds, controlUrl, type ServerKind } from "./servers.ts";
 
 /** The control API of one server's local world (its fake GitHub, fake Resend and clock). */
 export function worldOf(kind: ServerKind): AsyncControl {
@@ -26,7 +26,7 @@ export const test = base.extend<{ world: AsyncControl; invariants: undefined }>(
     // eslint-disable-next-line no-empty-pattern -- Playwright fixtures must destructure their first argument
     async ({}, use) => {
       await use(undefined);
-      for (const kind of SERVER_KINDS) {
+      for (const kind of activeServerKinds()) {
         const violations = await worldOf(kind).takeViolations();
         expect(
           violations,

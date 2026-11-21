@@ -25,8 +25,18 @@ beforeAll(() => {
   run("typescript/bin/tsc", "-b", "tsconfig.shared.json");
 }, 120_000);
 
-/** Compiles a project with one extra file in it, and returns the error messages that file produced. */
-function errorsWithProbe(tsconfig: string, probe: string, code: string): string[] {
+interface ProjectCache {
+  parsed: ts.ParsedCommandLine;
+  baseHost: ts.CompilerHost;
+  sourceFiles: Map<string, ts.SourceFile | undefined>;
+  program?: ts.Program;
+}
+
+const projectCache = new Map<string, ProjectCache>();
+
+function getProjectCache(tsconfig: string): ProjectCache {
+  const cached = projectCache.get(tsconfig);
+  if (cached) return cached;
   const configPath = join(APP_ROOT, tsconfig);
   const parsed = ts.getParsedCommandLineOfConfigFile(
     configPath,
@@ -39,23 +49,45 @@ function errorsWithProbe(tsconfig: string, probe: string, code: string): string[
     },
   );
   if (!parsed) throw new Error(`cannot read ${tsconfig}`);
+  const entry: ProjectCache = {
+    parsed,
+    baseHost: ts.createCompilerHost(parsed.options),
+    sourceFiles: new Map(),
+  };
+  projectCache.set(tsconfig, entry);
+  return entry;
+}
+
+/** Compiles a project with one extra file in it, and returns the error messages that file produced. */
+function errorsWithProbe(tsconfig: string, probe: string, code: string): string[] {
+  const cache = getProjectCache(tsconfig);
+  const { parsed, baseHost, sourceFiles } = cache;
   const probePath = resolve(APP_ROOT, probe);
-  const host = ts.createCompilerHost(parsed.options);
-  const { fileExists, readFile, getSourceFile } = host;
-  host.fileExists = (file) => resolve(file) === probePath || fileExists.call(host, file);
-  host.readFile = (file) => (resolve(file) === probePath ? code : readFile.call(host, file));
-  host.getSourceFile = (file, languageVersion, ...rest) =>
-    resolve(file) === probePath
-      ? ts.createSourceFile(file, code, languageVersion)
-      : getSourceFile.call(host, file, languageVersion, ...rest);
+  const host: ts.CompilerHost = {
+    ...baseHost,
+    fileExists: (file) => resolve(file) === probePath || baseHost.fileExists(file),
+    readFile: (file) => (resolve(file) === probePath ? code : baseHost.readFile(file)),
+    getSourceFile: (file, languageVersion, ...rest) => {
+      const resolved = resolve(file);
+      if (resolved === probePath) return ts.createSourceFile(file, code, languageVersion);
+      const key = `${resolved}\0${typeof languageVersion === "object" ? languageVersion.languageVersion : languageVersion}`;
+      if (sourceFiles.has(key)) return sourceFiles.get(key);
+      const sourceFile = baseHost.getSourceFile(file, languageVersion, ...rest);
+      sourceFiles.set(key, sourceFile);
+      return sourceFile;
+    },
+  };
   const program = ts.createProgram({
     rootNames: [...parsed.fileNames, probePath],
     options: parsed.options,
     ...(parsed.projectReferences ? { projectReferences: parsed.projectReferences } : {}),
     host,
+    ...(cache.program ? { oldProgram: cache.program } : {}),
   });
+  cache.program = program;
+  const probeSourceFile = program.getSourceFile(probePath);
   return ts
-    .getPreEmitDiagnostics(program)
+    .getPreEmitDiagnostics(program, probeSourceFile)
     .filter((diagnostic) => diagnostic.file && resolve(diagnostic.file.fileName) === probePath)
     .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
 }
@@ -108,13 +140,16 @@ describe("the three tsconfig projects", () => {
   }, 120_000);
 
   it("fail to compile shared code that touches an environment global", () => {
-    for (const global of ["document", "window", "fetch", "process", "console", "setTimeout"]) {
-      const errors = errorsWithProbe(
-        "tsconfig.shared.json",
-        "src/shared/__probe__.ts",
-        `export const probe: unknown = ${global};`,
+    const globals = ["document", "window", "fetch", "process", "console", "setTimeout"];
+    const errors = errorsWithProbe(
+      "tsconfig.shared.json",
+      "src/shared/__probe__.ts",
+      globals.map((name) => `export const _${name}: unknown = ${name};`).join("\n"),
+    );
+    for (const name of globals) {
+      expect(errors, name).toContainEqual(
+        expect.stringMatching(new RegExp(`Cannot find name '${name}'`)),
       );
-      expect(errors.join("\n"), global).toMatch(/Cannot find name/);
     }
   }, 120_000);
 

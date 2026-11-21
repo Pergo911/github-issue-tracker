@@ -8,6 +8,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { COLOR_SCHEMES, screens, VIEWPORTS } from "../e2e/screens.ts";
+import { playwrightWorkerArgs } from "./lib/jobs.ts";
 import { prepareRun, runPlaywright } from "./lib/run.ts";
 import { APP_ROOT } from "./lib/state.ts";
 
@@ -40,15 +41,19 @@ figure{margin:0}figcaption{font-size:12px;color:#555}
 ${sections}</body></html>`;
 }
 
+const requested = process.argv.slice(2);
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
-const run = await prepareRun();
+const run = await prepareRun(["seeded", "empty"]);
 let code: number;
 try {
-  code = await runPlaywright(["--project=screenshots", ...process.argv.slice(2)], {
-    ...run.env,
-    SCREENSHOT_DIR: output,
-  });
+  code = await runPlaywright(
+    ["--project=screenshots", ...playwrightWorkerArgs("VISUAL_WORKERS", requested), ...requested],
+    {
+      ...run.env,
+      SCREENSHOT_DIR: output,
+    },
+  );
 } finally {
   run.cleanup();
 }

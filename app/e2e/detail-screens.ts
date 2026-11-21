@@ -170,6 +170,7 @@ const pickerScreen = (id: string, index: number, description: string): Screen =>
     await expect(page.getByRole("listbox")).toBeVisible();
   },
   allowText: detailData,
+  freshOnViewport: true,
 });
 
 const closeScreen = (reason: number, id: string): Screen => ({
@@ -185,6 +186,7 @@ const closeScreen = (reason: number, id: string): Screen => ({
     await expect(page.getByRole("dialog")).toBeVisible();
   },
   allowText: detailData,
+  freshOnViewport: true,
 });
 
 const closedScreen = (reason: "completed" | "not_planned" | "duplicate", id: string): Screen => ({
@@ -280,6 +282,7 @@ export const detailScreens: Screen[] = [
       await expect(page.getByRole("dialog")).toBeVisible();
     },
     allowText: detailData,
+    freshOnViewport: true,
   },
   {
     id: "detail-not-found",

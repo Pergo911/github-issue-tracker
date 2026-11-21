@@ -1,9 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 import {
+  activeServerKinds,
   fakesPort,
   runDirectory,
   serverPort,
-  SERVER_KINDS,
   type ServerKind,
 } from "./e2e/support/servers.ts";
 
@@ -90,5 +90,5 @@ export default defineConfig({
     },
     { name: "visual", testMatch: "visual.spec.ts", use: { ...devices["Desktop Chrome"] } },
   ],
-  webServer: SERVER_KINDS.map(server),
+  webServer: activeServerKinds().map(server),
 });
