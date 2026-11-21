@@ -307,6 +307,7 @@ async function captureSite(config: PublicConfig, statusUrl: string, number: numb
           await capture(context, `board--${suffix}`, "/staff/reports?layout=board");
           await capture(context, `detail--${suffix}`, `/staff/reports/${number}`);
           await capture(context, `allowlist--${suffix}`, "/staff/allowlist");
+          await capture(context, `staff--${suffix}`, "/staff/members");
           await capture(context, `configuration--${suffix}`, "/staff/configuration");
         } finally {
           await context.close();

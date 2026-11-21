@@ -8,6 +8,7 @@ import { registerPublicConfig } from "./routes/public-config.ts";
 import { registerRecovery } from "./routes/recovery.ts";
 import { registerReports } from "./routes/reports.ts";
 import { registerStaff } from "./routes/staff.ts";
+import { registerStaffMembers } from "./routes/staff-members.ts";
 import { registerStatus } from "./routes/status.ts";
 import { registerWebhook } from "./routes/webhook.ts";
 
@@ -23,6 +24,7 @@ registerReports(app);
 registerRecovery(app);
 registerStatus(app);
 registerStaff(app);
+registerStaffMembers(app);
 registerContact(app);
 registerAllowlist(app);
 registerConfig(app);

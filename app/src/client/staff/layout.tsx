@@ -16,7 +16,8 @@ import { tokenStore } from "./auth/token-store.ts";
 
 interface NavItem {
   to: string;
-  label: "staff.nav.reports" | "staff.nav.allowlist" | "staff.nav.configuration";
+  label:
+    "staff.nav.reports" | "staff.nav.allowlist" | "staff.nav.members" | "staff.nav.configuration";
   /** The lowest role that sees the link. Admin links are for System admins only (SPEC 2.4). */
   minimum: StaffRole;
 }
@@ -24,6 +25,7 @@ interface NavItem {
 const NAV: readonly NavItem[] = [
   { to: "/staff/reports", label: "staff.nav.reports", minimum: "viewer" },
   { to: "/staff/allowlist", label: "staff.nav.allowlist", minimum: "admin" },
+  { to: "/staff/members", label: "staff.nav.members", minimum: "admin" },
   { to: "/staff/configuration", label: "staff.nav.configuration", minimum: "admin" },
 ];
 

@@ -1,3 +1,4 @@
+import type { GitHubInvitationPermission } from "../../src/shared/github/types.ts";
 import type { Clock } from "../clock.ts";
 
 /** GitHub's five repo roles, plus `none` for a signed-in user who is not a member (a private repo: 404). */
@@ -15,10 +16,34 @@ export function roleRank(role: RepoRole): number {
   return REPO_ROLES.indexOf(role);
 }
 
+export function maxRepoRole(a: RepoRole, b: RepoRole): RepoRole {
+  return roleRank(a) >= roleRank(b) ? a : b;
+}
+
 export interface Account {
   id: number;
   login: string;
   type: "User" | "Bot" | "Organization";
+}
+
+export interface StaffRecord {
+  account: Account;
+  /** Effective role (higher of `directRole` and `inheritedRole`). */
+  role: RepoRole;
+  directRole: RepoRole;
+  inheritedRole: RepoRole;
+  orgMember: boolean;
+  /** Whether this user's Staff tokens carry Repository `Administration: read & write` (ADR 0006). */
+  hasAdminPermission: boolean;
+}
+
+export interface InvitationRecord {
+  id: number;
+  invitee: string;
+  inviter: string;
+  permissions: GitHubInvitationPermission;
+  createdAt: number;
+  expired: boolean;
 }
 
 /** Who is making a call: an account and the repo role it has (the Bot's installation token acts as `write`). */
@@ -128,9 +153,15 @@ export interface StoreSettings {
    * only push access can set labels (silently dropped otherwise); the design assumes Triage can.
    */
   triageCanLabel: boolean;
+  /** Whether the Staff GitHub App currently has approved Repository `Administration: read & write` (ADR 0006). */
+  staffAppAdministration: boolean;
 }
 
-export const DEFAULT_SETTINGS: StoreSettings = { unknownLabels: "create", triageCanLabel: true };
+export const DEFAULT_SETTINGS: StoreSettings = {
+  unknownLabels: "create",
+  triageCanLabel: true,
+  staffAppAdministration: true,
+};
 
 export interface StoreOptions {
   org: string;
@@ -148,7 +179,8 @@ export class GitHubStore {
 
   readonly orgAccount: Account;
   readonly botAccount: Account;
-  readonly staff = new Map<string, { account: Account; role: RepoRole }>();
+  readonly staff = new Map<string, StaffRecord>();
+  readonly invitations = new Map<number, InvitationRecord>();
   readonly labels = new Map<string, LabelRecord>();
   readonly issues = new Map<number, IssueRecord>();
   readonly comments = new Map<number, CommentRecord>();
@@ -160,6 +192,7 @@ export class GitHubStore {
   #nextIssueId = FIRST_ISSUE_ID;
   #nextCommentId = 1_000_000_001;
   #nextLabelId = 2_000_000_001;
+  #nextInvitationId = 5_000_000_001;
   #nextEventId = 9_000_000_001;
   #nextUserId = 1_000_001;
 
@@ -172,6 +205,7 @@ export class GitHubStore {
 
   reset(): void {
     this.staff.clear();
+    this.invitations.clear();
     this.labels.clear();
     this.issues.clear();
     this.comments.clear();
@@ -182,33 +216,147 @@ export class GitHubStore {
     this.#nextIssueId = FIRST_ISSUE_ID;
     this.#nextCommentId = 1_000_000_001;
     this.#nextLabelId = 2_000_000_001;
+    this.#nextInvitationId = 5_000_000_001;
     this.#nextEventId = 9_000_000_001;
     this.#nextUserId = 1_000_001;
   }
 
   // ---------------------------------------------------------------------------------------- accounts
 
-  addStaff(login: string, role: RepoRole): Account {
-    const existing = this.staff.get(login);
+  addStaff(
+    login: string,
+    role: RepoRole,
+    options: {
+      inheritedRole?: RepoRole;
+      orgMember?: boolean;
+      hasAdminPermission?: boolean;
+    } = {},
+  ): Account {
+    const key = login.toLowerCase();
+    const inheritedRole = options.inheritedRole ?? "none";
+    const effective = maxRepoRole(role, inheritedRole);
+    const orgMember = options.orgMember ?? effective !== "none";
+    const hasAdminPermission = options.hasAdminPermission ?? true;
+    const existing = this.staff.get(key);
     if (existing) {
-      existing.role = role;
+      existing.directRole = role;
+      existing.inheritedRole = inheritedRole;
+      existing.role = effective;
+      existing.orgMember = orgMember;
+      existing.hasAdminPermission = hasAdminPermission;
       return existing.account;
     }
     const account: Account = { id: this.#nextUserId++, login, type: "User" };
-    this.staff.set(login, { account, role });
+    this.staff.set(key, {
+      account,
+      role: effective,
+      directRole: role,
+      inheritedRole,
+      orgMember,
+      hasAdminPermission,
+    });
     return account;
   }
 
+  staffByLogin(login: string): StaffRecord | undefined {
+    return this.staff.get(login.toLowerCase());
+  }
+
   accountByLogin(login: string): Account | undefined {
-    if (login === this.botAccount.login) return this.botAccount;
-    if (login === this.orgAccount.login) return this.orgAccount;
-    return this.staff.get(login)?.account;
+    if (login.toLowerCase() === this.botAccount.login.toLowerCase()) return this.botAccount;
+    if (login.toLowerCase() === this.orgAccount.login.toLowerCase()) return this.orgAccount;
+    return this.staffByLogin(login)?.account;
   }
 
   actorForLogin(login: string): Actor | undefined {
-    if (login === this.botAccount.login) return { account: this.botAccount, role: "write" };
-    const member = this.staff.get(login);
+    if (login.toLowerCase() === this.botAccount.login.toLowerCase()) {
+      return { account: this.botAccount, role: "write" };
+    }
+    const member = this.staffByLogin(login);
     return member ? { account: member.account, role: member.role } : undefined;
+  }
+
+  // ----------------------------------------------------------------------- collaborators & invites
+
+  collaborators(affiliation: "all" | "direct" | "outside"): StaffRecord[] {
+    return [...this.staff.values()].filter((member) => {
+      if (affiliation === "all" && member.role === "none") return false;
+      if (affiliation === "direct" && member.directRole === "none") return false;
+      if (affiliation === "outside" && (member.directRole === "none" || member.orgMember)) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  addOrUpdateCollaborator(
+    inviter: Account,
+    username: string,
+    permission: Exclude<RepoRole, "none">,
+  ): { status: 204 } | { status: 201; invitation: InvitationRecord } {
+    const member = this.staffByLogin(username);
+    if (!member) throw new GitHubFailure(404, "Not Found");
+    if (member.orgMember || member.role !== "none") {
+      member.directRole = permission;
+      member.role = maxRepoRole(member.directRole, member.inheritedRole);
+      return { status: 204 };
+    }
+    const existing = [...this.invitations.values()].find(
+      (inv) => inv.invitee.toLowerCase() === member.account.login.toLowerCase(),
+    );
+    if (existing) {
+      existing.permissions = permission;
+      return { status: 201, invitation: existing };
+    }
+    const invitation: InvitationRecord = {
+      id: this.#nextInvitationId++,
+      invitee: member.account.login,
+      inviter: inviter.login,
+      permissions: permission,
+      createdAt: this.clock.now(),
+      expired: false,
+    };
+    this.invitations.set(invitation.id, invitation);
+    return { status: 201, invitation };
+  }
+
+  removeCollaborator(actor: Account, username: string): void {
+    const member = this.staffByLogin(username);
+    if (!member) throw new GitHubFailure(404, "Not Found");
+    member.directRole = "none";
+    member.role = maxRepoRole(member.directRole, member.inheritedRole);
+    if (member.role === "none") {
+      // GitHub automatically unassigns open issues when a collaborator loses repository access.
+      const login = member.account.login;
+      for (const issue of this.issues.values()) {
+        if (issue.state !== "open" || !issue.assignees.includes(login)) continue;
+        issue.assignees = issue.assignees.filter((current) => current !== login);
+        issue.updatedAt = this.clock.now();
+        this.#record(issue.number, actor, { event: "unassigned", assignee: login });
+      }
+    }
+  }
+
+  collaboratorPermission(username: string): StaffRecord {
+    const member = this.staffByLogin(username);
+    if (!member) throw new GitHubFailure(404, "Not Found");
+    return member;
+  }
+
+  listInvitations(): InvitationRecord[] {
+    return [...this.invitations.values()];
+  }
+
+  updateInvitation(id: number, permissions: GitHubInvitationPermission): InvitationRecord {
+    const invitation = this.invitations.get(id);
+    if (!invitation) throw new GitHubFailure(404, "Not Found");
+    invitation.permissions = permissions;
+    return invitation;
+  }
+
+  deleteInvitation(id: number): void {
+    if (!this.invitations.has(id)) throw new GitHubFailure(404, "Not Found");
+    this.invitations.delete(id);
   }
 
   // ------------------------------------------------------------------------------------------ labels
@@ -316,7 +464,7 @@ export class GitHubStore {
   #resolveAssignees(requested: string[]): Account[] {
     const resolved: Account[] = [];
     for (const login of requested) {
-      const member = this.staff.get(login);
+      const member = this.staffByLogin(login);
       const account = member && member.role !== "none" ? member.account : undefined;
       if (account && !resolved.includes(account)) resolved.push(account);
     }

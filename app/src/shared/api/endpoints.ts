@@ -11,6 +11,13 @@ import {
 import type { Config } from "../config/schema.ts";
 import { FIELD_ERRORS } from "../reports/validate.ts";
 import type { StatusView } from "../status/view.ts";
+import { STAFF_ROLES } from "../github/roles.ts";
+import type {
+  AddStaffResult,
+  StaffInvitation,
+  StaffMember,
+  StaffMembersList,
+} from "../staff/members.ts";
 import type { StaffDeviceCode, StaffDevicePoll, StaffMeta, StaffTokens } from "../staff/session.ts";
 import {
   CLIENT_ERROR_CODES,
@@ -45,6 +52,12 @@ const fieldErrors = Object.fromEntries(FIELD_ERRORS.map((code) => [code, 422])) 
 
 const allowlistEmail = z.string().max(254);
 const allowlistNote = z.string().trim().max(MAX_NOTE_LENGTH);
+const staffUsername = z.string().max(100);
+const staffRole = z.enum(STAFF_ROLES);
+const queryPositiveInt = z
+  .union([z.int().positive(), z.string().regex(/^[1-9]\d{0,15}$/)])
+  .transform((value) => Number(value))
+  .refine((value) => Number.isSafeInteger(value) && value > 0);
 
 /** What a configuration save changed in the repo's labels (SPEC 2.4: the save is the sync). */
 export interface LabelSync {
@@ -303,6 +316,78 @@ export const endpoints = {
     request: z.object({ text: z.string().max(200_000) }),
     response: type<{ added: AllowlistEntry[]; errors: BulkLineError[] }>(),
     errors: { too_many_entries: 422 },
+    role: "admin",
+  }),
+
+  /** Staff role management on the reports repository (SPEC 2.4, ADR 0006). System admin only. */
+  staffMembersList: defineEndpoint({
+    method: "GET",
+    path: "/api/staff/members",
+    request: z.object({}),
+    response: type<StaffMembersList>(),
+    errors: { staff_permission_required: 403 },
+    role: "admin",
+  }),
+  staffMemberAdd: defineEndpoint({
+    method: "POST",
+    path: "/api/staff/members",
+    request: z.object({ username: staffUsername, role: staffRole }),
+    response: type<AddStaffResult>(),
+    errors: {
+      staff_permission_required: 403,
+      invalid_username: 422,
+      already_staff: 409,
+      already_invited: 409,
+      github_user_not_found: 404,
+    },
+    role: "admin",
+  }),
+  staffMemberRole: defineEndpoint({
+    method: "PUT",
+    path: "/api/staff/members",
+    request: z.object({ username: staffUsername, role: staffRole }),
+    response: type<{ member: StaffMember; overridden: boolean }>(),
+    errors: {
+      staff_permission_required: 403,
+      invalid_username: 422,
+      cannot_modify_self: 409,
+      last_admin_required: 409,
+      inherited_member_readonly: 409,
+    },
+    role: "admin",
+  }),
+  staffMemberRemove: defineEndpoint({
+    method: "DELETE",
+    path: "/api/staff/members",
+    request: z.object({ username: staffUsername }),
+    response: type<{
+      removed: true;
+      overridden: boolean;
+      effectiveRole: (typeof STAFF_ROLES)[number] | null;
+    }>(),
+    errors: {
+      staff_permission_required: 403,
+      invalid_username: 422,
+      cannot_modify_self: 409,
+      last_admin_required: 409,
+      inherited_member_readonly: 409,
+    },
+    role: "admin",
+  }),
+  staffInvitationRole: defineEndpoint({
+    method: "PATCH",
+    path: "/api/staff/members/invitations",
+    request: z.object({ invitationId: z.int().positive(), role: staffRole }),
+    response: type<{ invitation: StaffInvitation }>(),
+    errors: { staff_permission_required: 403 },
+    role: "admin",
+  }),
+  staffInvitationCancel: defineEndpoint({
+    method: "DELETE",
+    path: "/api/staff/members/invitations",
+    request: z.object({ invitationId: queryPositiveInt }),
+    response: type<{ cancelled: true }>(),
+    errors: { staff_permission_required: 403 },
     role: "admin",
   }),
 

@@ -1,6 +1,7 @@
 import { GITHUB_API_VERSION } from "../../src/shared/github/constants.ts";
 import type {
   GitHubErrorBody,
+  GitHubInvitationPermission,
   GitHubIssue,
   GitHubIssuesWebhookPayload,
 } from "../../src/shared/github/types.ts";
@@ -130,6 +131,22 @@ const STATE_REASONS: readonly (StateReason | null)[] = [
   null,
 ];
 
+const COLLABORATOR_PERMISSIONS: Readonly<Record<string, Exclude<RepoRole, "none">>> = {
+  pull: "read",
+  triage: "triage",
+  push: "write",
+  maintain: "maintain",
+  admin: "admin",
+};
+
+const INVITATION_PERMISSIONS: readonly GitHubInvitationPermission[] = [
+  "read",
+  "triage",
+  "write",
+  "maintain",
+  "admin",
+];
+
 /** The REST API as `api.github.com`: everything the design uses (SPEC 2.2-2.4, 3.2, 3.3, 4.1-4.4). */
 export class GitHubService {
   readonly #deps: GitHubServiceDeps;
@@ -209,6 +226,24 @@ export class GitHubService {
     }
     if (actor.role === "none") throw new GitHubFailure(404, "Not Found");
     if (roleRank(actor.role) < roleRank(minimum)) {
+      throw new GitHubFailure(403, "Resource not accessible by integration");
+    }
+    return actor;
+  }
+
+  /**
+   * Requires both the repo role AND Repository `Administration` App permission (ADR 0006):
+   * the Bot installation token never has Administration, and a stale Staff token or unapproved App returns 403.
+   */
+  #requireAdministration(context: RouteContext, minimum: RepoRole = "admin"): Actor {
+    const actor = this.#member(context, minimum);
+    if (actor.account.type === "Bot") {
+      throw new GitHubFailure(403, "Resource not accessible by integration");
+    }
+    if (!this.#store.settings.staffAppAdministration) {
+      throw new GitHubFailure(403, "Resource not accessible by integration");
+    }
+    if (this.#store.staffByLogin(actor.account.login)?.hasAdminPermission === false) {
       throw new GitHubFailure(403, "Resource not accessible by integration");
     }
     return actor;
@@ -515,6 +550,80 @@ export class GitHubService {
           .filter((member) => roleRank(member.role) >= roleRank("triage"))
           .map((member) => renderer.user(member.account)),
       );
+    });
+
+    // ---- collaborators and repository invitations (ADR 0006)
+    r.add("GET", `${repoBase}/collaborators`, (c) => {
+      this.#requireAdministration(c, "write");
+      const affiliation = c.url.searchParams.get("affiliation") ?? "all";
+      if (affiliation !== "all" && affiliation !== "direct" && affiliation !== "outside") {
+        throw validation("affiliation", "invalid", "Collaborator");
+      }
+      const renderer = this.#renderer(c.url);
+      return paged(
+        c.url,
+        this.#store.collaborators(affiliation).map((member) => renderer.collaborator(member)),
+      );
+    });
+
+    r.add("GET", `${repoBase}/collaborators/:username/permission`, (c) => {
+      this.#requireAdministration(c, "write");
+      const member = this.#store.collaboratorPermission(c.params["username"] as string);
+      return jsonResponse(this.#renderer(c.url).collaboratorPermission(member));
+    });
+
+    r.add("PUT", `${repoBase}/collaborators/:username`, async (c) => {
+      const actor = this.#requireAdministration(c, "admin");
+      const body = asObject(await readJson(c.request));
+      const raw = body["permission"] === undefined ? "push" : body["permission"];
+      if (typeof raw !== "string" || !(raw in COLLABORATOR_PERMISSIONS)) {
+        throw validation("permission", "invalid", "Collaborator");
+      }
+      const result = this.#store.addOrUpdateCollaborator(
+        actor.account,
+        c.params["username"] as string,
+        COLLABORATOR_PERMISSIONS[raw]!,
+      );
+      if (result.status === 204) return new Response(null, { status: 204 });
+      return jsonResponse(this.#renderer(c.url).invitation(result.invitation), 201);
+    });
+
+    r.add("DELETE", `${repoBase}/collaborators/:username`, (c) => {
+      const actor = this.#requireAdministration(c, "admin");
+      this.#store.removeCollaborator(actor.account, c.params["username"] as string);
+      return new Response(null, { status: 204 });
+    });
+
+    r.add("GET", `${repoBase}/invitations`, (c) => {
+      this.#requireAdministration(c, "admin");
+      const renderer = this.#renderer(c.url);
+      return paged(
+        c.url,
+        this.#store.listInvitations().map((invitation) => renderer.invitation(invitation)),
+      );
+    });
+
+    r.add("PATCH", `${repoBase}/invitations/:id`, async (c) => {
+      this.#requireAdministration(c, "admin");
+      const body = asObject(await readJson(c.request));
+      const permissions = body["permissions"];
+      if (
+        typeof permissions !== "string" ||
+        !INVITATION_PERMISSIONS.includes(permissions as GitHubInvitationPermission)
+      ) {
+        throw validation("permissions", "invalid", "RepositoryInvitation");
+      }
+      const updated = this.#store.updateInvitation(
+        Number(c.params["id"]),
+        permissions as GitHubInvitationPermission,
+      );
+      return jsonResponse(this.#renderer(c.url).invitation(updated));
+    });
+
+    r.add("DELETE", `${repoBase}/invitations/:id`, (c) => {
+      this.#requireAdministration(c, "admin");
+      this.#store.deleteInvitation(Number(c.params["id"]));
+      return new Response(null, { status: 204 });
     });
 
     // ---- labels

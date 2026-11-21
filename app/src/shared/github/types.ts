@@ -132,6 +132,35 @@ export type GitHubRepository = Pick<
   permissions?: GitHubRepoPermissions;
 };
 
+/** A collaborator entry returned by `GET /repos/{owner}/{repo}/collaborators`. */
+export type GitHubCollaborator = GitHubUser & {
+  permissions?: GitHubRepoPermissions;
+  role_name?: string;
+};
+
+/** Effective permission response from `GET /repos/{owner}/{repo}/collaborators/{username}/permission`. */
+export interface GitHubCollaboratorPermission {
+  /** Legacy base role: `triage` maps to `"read"` and `maintain` maps to `"write"`. Prefer `role_name` / `user.permissions`. */
+  permission: string;
+  role_name: string;
+  user: GitHubCollaborator | null;
+}
+
+export type GitHubInvitationPermission = "read" | "triage" | "write" | "maintain" | "admin";
+
+type RawInvitation = Schemas["repository-invitation"];
+
+/** A pending repository invitation from `GET`/`PATCH /repos/{owner}/{repo}/invitations` or `PUT /collaborators/{username}` (201). */
+export type GitHubRepositoryInvitation = Pick<
+  RawInvitation,
+  "node_id" | "created_at" | "expired" | "url" | "html_url"
+> & {
+  id: number;
+  invitee: GitHubUser | null;
+  inviter: GitHubUser | null;
+  permissions: GitHubInvitationPermission;
+};
+
 export interface GitHubSearchResult {
   total_count: number;
   incomplete_results: boolean;
