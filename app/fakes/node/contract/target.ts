@@ -40,6 +40,8 @@ export interface ContractTarget {
   botToken(): Promise<string>;
   /** A token with admin on the repo: the operator's own, or the fake's admin. */
   operatorToken(): string;
+  /** An outside GitHub username for collaborator-invitation write checks (`null` when unset on live). */
+  inviteTestUser(): string | null;
   /** `/repos/<org>/<repo><suffix>`. */
   path(suffix?: string): string;
 }
@@ -80,6 +82,7 @@ async function toReply(response: Response): Promise<Reply> {
 export async function fakeTarget(): Promise<ContractTarget & { world: TestWorld }> {
   const world = await createTestWorld();
   const cast = await castedWorld(world);
+  world.control.addStaff({ login: "contract-outside-user", role: "none", orgMember: false });
   return {
     kind: "fake",
     world,
@@ -99,6 +102,7 @@ export async function fakeTarget(): Promise<ContractTarget & { world: TestWorld 
     signJwt: (claims = {}) => signWith(world.keys.privateKeyPkcs8, TEST_BOT.appId, claims),
     botToken: () => Promise.resolve(cast.bot),
     operatorToken: () => cast.admin,
+    inviteTestUser: () => "contract-outside-user",
     path: (suffix = "") => `/repos/${world.org}/${world.repo}${suffix}`,
   };
 }
@@ -225,6 +229,7 @@ export function liveTarget(credentials: LiveCredentials): ContractTarget {
       return token;
     },
     operatorToken: () => operatorToken,
+    inviteTestUser: () => process.env["CONTRACT_LIVE_TEST_USER"]?.trim() || null,
     path: (suffix = "") => `/repos/${org}/${SANDBOX_REPO}${suffix}`,
   };
 }

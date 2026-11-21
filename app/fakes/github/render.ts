@@ -1,10 +1,13 @@
 import { isoSeconds } from "../http.ts";
 import type {
+  GitHubCollaborator,
+  GitHubCollaboratorPermission,
   GitHubComment,
   GitHubIssue,
   GitHubLabel,
   GitHubRepoPermissions,
   GitHubRepository,
+  GitHubRepositoryInvitation,
   GitHubTimelineEvent,
   GitHubUser,
 } from "../../src/shared/github/types.ts";
@@ -13,9 +16,11 @@ import {
   type Account,
   type CommentRecord,
   type GitHubStore,
+  type InvitationRecord,
   type IssueRecord,
   type LabelRecord,
   type RepoRole,
+  type StaffRecord,
   type TimelineRecord,
 } from "./store.ts";
 
@@ -237,6 +242,45 @@ export class Renderer {
       default_branch: "main",
       owner: this.user(this.#store.orgAccount),
       ...(role === null ? {} : { permissions: permissionsFor(role) }),
+    };
+  }
+
+  collaborator(member: StaffRecord): GitHubCollaborator {
+    return {
+      ...this.user(member.account),
+      permissions: permissionsFor(member.role),
+      role_name: member.role,
+    };
+  }
+
+  collaboratorPermission(member: StaffRecord): GitHubCollaboratorPermission {
+    // GitHub's legacy `permission` field maps `maintain` -> `write` and `triage` -> `read`.
+    const legacy =
+      member.role === "admin"
+        ? "admin"
+        : member.role === "maintain" || member.role === "write"
+          ? "write"
+          : member.role === "triage" || member.role === "read"
+            ? "read"
+            : "none";
+    return {
+      permission: legacy,
+      role_name: member.role,
+      user: this.collaborator(member),
+    };
+  }
+
+  invitation(record: InvitationRecord): GitHubRepositoryInvitation {
+    return {
+      id: record.id,
+      node_id: `RI_fake_${record.id}`,
+      invitee: this.#userByLogin(record.invitee),
+      inviter: this.#userByLogin(record.inviter),
+      permissions: record.permissions,
+      created_at: isoSeconds(record.createdAt),
+      expired: record.expired,
+      url: `${this.#apiBase}/repos/${this.#repoPath}/invitations/${record.id}`,
+      html_url: `${REAL_WEB}/${this.#repoPath}/invitations`,
     };
   }
 }

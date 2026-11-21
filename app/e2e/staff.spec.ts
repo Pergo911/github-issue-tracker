@@ -67,7 +67,11 @@ test.describe("signing in with the device flow", () => {
         page.getByText(hu[`staff.role.${role}`], { exact: false }).first(),
       ).toBeVisible();
       await expect(link(page, hu["staff.nav.reports"])).toBeVisible();
-      const adminLinks = [hu["staff.nav.allowlist"], hu["staff.nav.configuration"]];
+      const adminLinks = [
+        hu["staff.nav.allowlist"],
+        hu["staff.nav.members"],
+        hu["staff.nav.configuration"],
+      ];
       for (const name of adminLinks) {
         await expect(link(page, name)).toHaveCount(role === "admin" ? 1 : 0);
       }
@@ -239,10 +243,12 @@ test.describe("the role gates the navigation", () => {
         await expect(
           page.getByRole("heading", { level: 1, name: hu["staff.nav.allowlist"] }),
         ).toBeVisible();
+        await expect(link(page, hu["staff.nav.members"])).toBeVisible();
         await expect(link(page, hu["staff.nav.configuration"])).toBeVisible();
       } else {
         await expect(page).toHaveURL(/\/staff\/reports/);
         await expect(link(page, hu["staff.nav.allowlist"])).toHaveCount(0);
+        await expect(link(page, hu["staff.nav.members"])).toHaveCount(0);
         await expect(link(page, hu["staff.nav.configuration"])).toHaveCount(0);
       }
     });

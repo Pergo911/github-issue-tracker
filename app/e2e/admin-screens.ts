@@ -81,6 +81,58 @@ const entries = [
 
 const listUrl = "**/api/staff/allowlist";
 const bulkUrl = "**/api/staff/allowlist/bulk";
+const membersUrl = "**/api/staff/members";
+
+const staffMembersData: AllowedText[] = [
+  ...staffData,
+  "ada-owner",
+  "dual-tech",
+  "mate-tech",
+  "vera-view",
+  "bela-external",
+  "anna-guest",
+  /\d{4}\. \p{L}+\. \d+\./u,
+];
+
+const staffMembersPayload = {
+  members: [
+    { login: "ada-owner", role: "admin", managed: false, isSelf: false },
+    { login: "screen-admin", role: "admin", managed: true, isSelf: true },
+    { login: "mate-tech", role: "maintenance", managed: true, isSelf: false },
+    { login: "vera-view", role: "viewer", managed: true, isSelf: false },
+  ],
+  invitations: [
+    {
+      id: 5001,
+      login: "bela-external",
+      role: "maintenance",
+      invitedBy: "screen-admin",
+      createdAt: "2026-05-04T08:00:00Z",
+      expired: false,
+    },
+    {
+      id: 5002,
+      login: "anna-guest",
+      role: "viewer",
+      invitedBy: "ada-owner",
+      createdAt: "2026-04-12T10:30:00Z",
+      expired: true,
+    },
+  ],
+};
+
+function serveMembers(payload: typeof staffMembersPayload) {
+  return async (page: Page) => {
+    await signedInAdmin(page);
+    await page.route(membersUrl, (route) =>
+      route.request().method() === "GET" ? route.fulfill({ json: payload }) : route.continue(),
+    );
+  };
+}
+
+const membersShown = async (page: Page) => {
+  await expect(page.locator("[data-staff-member]").first()).toBeVisible(SLOW);
+};
 
 async function signedInAdmin(page: Page) {
   const { token } = await staffToken("screen-admin", "admin");
@@ -224,6 +276,131 @@ export const adminScreens: Screen[] = [
       await expect(page.getByRole("button", { name: /./ }).last()).toBeVisible();
     },
     allowText: staffData,
+  },
+  {
+    id: "staff-members-populated",
+    description:
+      "The Staff screen with direct members (including self), an inherited-only Org Owner, and pending invitations.",
+    server: "seeded",
+    path: "/staff/members",
+    prepare: serveMembers(staffMembersPayload),
+    ready: async (page) => {
+      await membersShown(page);
+      await expect(page.locator("[data-staff-invitation]").first()).toBeVisible(SLOW);
+    },
+    allowText: staffMembersData,
+  },
+  {
+    id: "staff-members-edit-role",
+    description: "The Staff screen with inline role editing open on an active direct member.",
+    server: "seeded",
+    path: "/staff/members",
+    prepare: serveMembers(staffMembersPayload),
+    ready: async (page) => {
+      await membersShown(page);
+      await page.locator('[data-staff-member="mate-tech"] button').first().click();
+      await expect(page.locator('[data-staff-member="mate-tech"] select')).toBeVisible();
+    },
+    allowText: staffMembersData,
+  },
+  {
+    id: "staff-members-remove-confirm",
+    description:
+      "The Staff screen with inline Remove confirmation open, warning about immediate access loss and unassignment.",
+    server: "seeded",
+    path: "/staff/members",
+    prepare: serveMembers(staffMembersPayload),
+    ready: async (page) => {
+      await membersShown(page);
+      await page.locator('[data-staff-member="mate-tech"] button').nth(1).click();
+      await expect(page.getByRole("alert")).toBeVisible();
+    },
+    allowText: staffMembersData,
+  },
+  {
+    id: "staff-members-single-admin",
+    description: "The Staff screen with a single active System admin and no pending invitations.",
+    server: "seeded",
+    path: "/staff/members",
+    prepare: serveMembers({
+      members: [
+        { login: "screen-admin", role: "admin", managed: true, isSelf: true },
+        { login: "mate-tech", role: "maintenance", managed: true, isSelf: false },
+      ],
+      invitations: [],
+    }),
+    ready: async (page) => {
+      await membersShown(page);
+      await expect(page.locator("[data-staff-invitation]")).toHaveCount(0);
+    },
+    allowText: staffMembersData,
+  },
+  {
+    id: "staff-members-permission-required",
+    description:
+      "The Staff screen when the Staff GitHub App lacks approved Repository Administration permission or the token is stale.",
+    server: "seeded",
+    path: "/staff/members",
+    prepare: async (page) => {
+      await signedInAdmin(page);
+      await page.route(membersUrl, (route) =>
+        route.fulfill({ status: 403, json: { error: { code: "staff_permission_required" } } }),
+      );
+    },
+    ready: async (page) => {
+      await expect(page.getByRole("alert")).toBeVisible(SLOW);
+    },
+    allowText: staffMembersData,
+  },
+  {
+    id: "staff-members-override-warning",
+    description:
+      "The Staff screen after a direct downgrade was overridden by an overlapping GitHub Organization or team grant.",
+    server: "seeded",
+    path: "/staff/members",
+    prepare: async (page) => {
+      await signedInAdmin(page);
+      const overrideMembers = [
+        { login: "screen-admin", role: "admin", managed: true, isSelf: true },
+        { login: "dual-tech", role: "admin", managed: true, isSelf: false },
+      ];
+      let saved = false;
+      await page.route(membersUrl, (route) => {
+        if (route.request().method() === "GET") {
+          return route.fulfill({
+            json: {
+              members: saved
+                ? [
+                    { login: "screen-admin", role: "admin", managed: true, isSelf: true },
+                    { login: "dual-tech", role: "maintenance", managed: true, isSelf: false },
+                  ]
+                : overrideMembers,
+              invitations: [],
+            },
+          });
+        }
+        if (route.request().method() === "PUT") {
+          saved = true;
+          return route.fulfill({
+            json: {
+              member: { login: "dual-tech", role: "maintenance", managed: true, isSelf: false },
+              overridden: true,
+            },
+          });
+        }
+        return route.continue();
+      });
+    },
+    ready: async (page) => {
+      await membersShown(page);
+      const row = page.locator('[data-staff-member="dual-tech"]');
+      await row.getByRole("button").first().click();
+      await row.locator("select").selectOption("viewer");
+      await row.locator("button[type=submit]").click();
+      await page.mouse.move(-1, -1);
+      await expect(page.getByRole("status")).toBeVisible();
+    },
+    allowText: staffMembersData,
   },
   {
     id: "config-organization",

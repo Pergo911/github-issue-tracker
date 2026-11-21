@@ -6,6 +6,7 @@ import type {
   FaultSpec,
   ReportSpec,
   StaffGrant,
+  StaffSpec,
   Violation,
   WorldSettings,
   WorldSummary,
@@ -238,19 +239,27 @@ export function createWorld(options: WorldOptions): World {
     return [...store.staff.values()].map(({ account, role }) => ({
       login: account.login,
       role,
-      token: staticTokens.get(account.login) ?? "",
+      token: staticTokens.get(account.login.toLowerCase()) ?? "",
     }));
   }
   const staticTokens = new Map<string, string>();
 
-  function addStaff(spec: { login: string; role: StaffGrant["role"] }): StaffGrant {
-    store.addStaff(spec.login, spec.role);
-    let token = staticTokens.get(spec.login);
+  function addStaff(spec: StaffSpec): StaffGrant {
+    const account = store.addStaff(spec.login, spec.role, {
+      ...(spec.inheritedRole !== undefined ? { inheritedRole: spec.inheritedRole } : {}),
+      ...(spec.orgMember !== undefined ? { orgMember: spec.orgMember } : {}),
+      ...(spec.hasAdminPermission !== undefined
+        ? { hasAdminPermission: spec.hasAdminPermission }
+        : {}),
+    });
+    const key = account.login.toLowerCase();
+    let token = staticTokens.get(key);
     if (!token) {
-      token = tokens.mintStatic(spec.login);
-      staticTokens.set(spec.login, token);
+      token = tokens.mintStatic(account.login);
+      staticTokens.set(key, token);
     }
-    return { login: spec.login, role: spec.role, token };
+    const effective = store.staffByLogin(account.login)?.role ?? spec.role;
+    return { login: account.login, role: effective, token };
   }
 
   function createReport(spec: ReportSpec): { number: number; id: number } {
@@ -305,6 +314,8 @@ export function createWorld(options: WorldOptions): World {
       if (update.unknownLabels) store.settings.unknownLabels = update.unknownLabels;
       if (update.triageCanLabel !== undefined)
         store.settings.triageCanLabel = update.triageCanLabel;
+      if (update.staffAppAdministration !== undefined)
+        store.settings.staffAppAdministration = update.staffAppAdministration;
       if (update.strictPolling !== undefined) device.strictPolling = update.strictPolling;
       if (update.verifiedDomains) verifiedDomains = [...update.verifiedDomains];
     },
@@ -389,9 +400,9 @@ export function createWorld(options: WorldOptions): World {
 
     deviceCodes: () => device.codes(),
     approveDeviceCode(userCode, login) {
-      if (!store.staff.has(login))
-        throw new Error(`No Staff user ${login}: add one with addStaff first`);
-      device.approve(userCode, login);
+      const member = store.staffByLogin(login);
+      if (!member) throw new Error(`No Staff user ${login}: add one with addStaff first`);
+      device.approve(userCode, member.account.login);
     },
     denyDeviceCode: (userCode) => device.deny(userCode),
     expireDeviceCode: (userCode) => device.expire(userCode),

@@ -33,6 +33,7 @@ export const router = createBrowserRouter([
           { path: "reports", lazy: () => import("../staff/reports/list-page.tsx") },
           { path: "reports/:number", lazy: () => import("../staff/reports/detail-page.tsx") },
           { path: "allowlist", lazy: () => import("../staff/allowlist/allowlist-page.tsx") },
+          { path: "members", lazy: () => import("../staff/members/members-page.tsx") },
           {
             path: "configuration",
             lazy: () => import("../staff/configuration/configuration-page.tsx"),
