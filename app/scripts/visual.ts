@@ -3,9 +3,11 @@
 // `npm run test:visual:update`: write new and changed reference images. Deliberate by design:
 //   1. run test:visual, 2. open every image in .screenshots/diffs/index.html (actual, expected, diff),
 //   3. only if each change is intended, run test:visual:update and commit the changed e2e/reference/*.png.
-// The browser runs in a container (Playwright's `run-server`); the dev servers and the test runner stay on
-// the host, and the container reaches them through Playwright's own tunnel (`exposeNetwork`), so nothing is
-// mounted, no host port is fixed and the container name is unique per run.
+// The browser runs in a container (Playwright's `run-server`, with only `playwright-core` mounted read-only so
+// no npm download happens at runtime); the dev servers and the test runner stay on the host, and the container
+// reaches them through Playwright's own tunnel (`exposeNetwork`), so no workspace state is mounted, no host port
+// is fixed and the container name is unique per run. Inside Playwright's container in CI (`VISUAL_IN_CONTAINER=1`
+// or `--no-docker`), the suite drives the container's own browser directly without Docker-in-Docker.
 import { spawnSync } from "node:child_process";
 import {
   cpSync,
@@ -19,14 +21,22 @@ import {
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative } from "node:path";
 import { randomBytes } from "node:crypto";
+import { hasWorkersFlag, machinePlaywrightWorkers } from "./lib/jobs.ts";
 import { prepareRun, runPlaywright } from "./lib/run.ts";
 import { APP_ROOT } from "./lib/state.ts";
 
 const update = process.argv.includes("--update");
-const extra = process.argv.slice(2).filter((argument) => argument !== "--update");
+const inContainer =
+  process.argv.includes("--no-docker") || process.env["VISUAL_IN_CONTAINER"] === "1";
+const extra = process.argv
+  .slice(2)
+  .filter((argument) => argument !== "--update" && argument !== "--no-docker");
+const workers = machinePlaywrightWorkers("VISUAL_WORKERS");
+const workerArgs = hasWorkersFlag(extra) ? [] : [`--workers=${workers}`];
 
 const require = createRequire(import.meta.url);
 const { version } = require("@playwright/test/package.json") as { version: string };
+const playwrightCoreDir = dirname(require.resolve("playwright-core/package.json"));
 const image = `mcr.microsoft.com/playwright:v${version}-noble`;
 const name = `reports-visual-${randomBytes(4).toString("hex")}`;
 
@@ -91,10 +101,10 @@ function collectDiffs(testResults: string): string | null {
   return join(output, "index.html");
 }
 
-if (docker("info").status !== 0) {
+if (!inContainer && docker("info").status !== 0) {
   console.log("Waiting for the Docker daemon (is Docker Desktop running?) ...");
   try {
-    await waitFor("the Docker daemon", () => docker("info").status === 0, 90);
+    await waitFor("the Docker daemon", () => docker("info").status === 0, 10);
   } catch {
     console.error(
       "Docker is not available. The reference screenshots need it: start Docker Desktop and retry.",
@@ -103,40 +113,50 @@ if (docker("info").status !== 0) {
   }
 }
 
-const run = await prepareRun();
+const run = await prepareRun(["seeded", "empty"]);
 let code: number;
 try {
-  console.log(`Starting ${image} as ${name} ...`);
-  const started = docker(
-    "run",
-    "-d",
-    "--rm",
-    "--init",
-    "--ipc=host",
-    "--name",
-    name,
-    "-p",
-    "127.0.0.1::3000",
-    image,
-    "/bin/sh",
-    "-c",
-    `npx -y playwright@${version} run-server --port 3000 --host 0.0.0.0`,
-  );
-  if (started.status !== 0) throw new Error(`docker run failed: ${started.stderr}`);
-  await waitFor(
-    "the Playwright server in the container",
-    () => docker("logs", name).stdout.includes("Listening on"),
-    180,
-  );
-  const mapping = docker("port", name, "3000/tcp").stdout.trim().split("\n")[0] ?? "";
-  const port = /:(\d+)$/.exec(mapping)?.[1];
-  if (!port) throw new Error(`could not find the published port in "${mapping}"`);
-
-  code = await runPlaywright(["--project=visual", ...extra], {
+  const extraEnv: Record<string, string> = {
     ...run.env,
-    PW_DOCKER_WS_ENDPOINT: `ws://127.0.0.1:${port}/`,
     ...(update ? { UPDATE_SNAPSHOTS: "1" } : {}),
-  });
+  };
+  if (!inContainer) {
+    console.log(`Starting ${image} as ${name} ...`);
+    const started = docker(
+      "run",
+      "-d",
+      "--rm",
+      "--init",
+      "--ipc=host",
+      "--name",
+      name,
+      "-p",
+      "127.0.0.1::3000",
+      // Mount only the pure-JS playwright-core package read-only so the container skips `npx -y` downloads.
+      "-v",
+      `${playwrightCoreDir}:/pw:ro`,
+      image,
+      "node",
+      "/pw/cli.js",
+      "run-server",
+      "--port",
+      "3000",
+      "--host",
+      "0.0.0.0",
+    );
+    if (started.status !== 0) throw new Error(`docker run failed: ${started.stderr}`);
+    await waitFor(
+      "the Playwright server in the container",
+      () => docker("logs", name).stdout.includes("Listening on"),
+      180,
+    );
+    const mapping = docker("port", name, "3000/tcp").stdout.trim().split("\n")[0] ?? "";
+    const port = /:(\d+)$/.exec(mapping)?.[1];
+    if (!port) throw new Error(`could not find the published port in "${mapping}"`);
+    extraEnv["PW_DOCKER_WS_ENDPOINT"] = `ws://127.0.0.1:${port}/`;
+  }
+
+  code = await runPlaywright(["--project=visual", ...workerArgs, ...extra], extraEnv);
   const diffs = collectDiffs(join(run.directory, "test-results"));
   if (!update && diffs) {
     console.error(
@@ -149,7 +169,7 @@ try {
     );
   }
 } finally {
-  docker("rm", "-f", name);
+  if (!inContainer) docker("rm", "-f", name);
   run.cleanup();
 }
 process.exit(code);

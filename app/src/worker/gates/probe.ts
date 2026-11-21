@@ -12,7 +12,10 @@ export type ProbePoint =
   | "after-kv-issue-token"
   | "before-complete";
 
-export const probe: { crashAt: ProbePoint | null } = { crashAt: null };
+export const probe: { crashAt: ProbePoint | null; botTimeoutMs: number | null } = {
+  crashAt: null,
+  botTimeoutMs: null,
+};
 
 export function reach(point: ProbePoint): void {
   if (probe.crashAt === point) {
