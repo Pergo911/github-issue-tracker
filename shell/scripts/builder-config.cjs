@@ -27,9 +27,9 @@ function createBuilderConfig(environment) {
     // Merged into the packaged package.json, where the shell reads `appUrl`.
     extraMetadata: { appUrl: target.url },
     directories: { output: "dist" },
-    files: ["package.json", "src/**/*.cjs"],
+    files: ["package.json", "src/**/*.cjs", "assets/icon.ico"],
     // Unsigned: SmartScreen's click-through is accepted (SPEC 2.1).
-    win: { target: ["nsis", "portable"] },
+    win: { icon: "assets/icon.ico", target: ["nsis", "portable"] },
     // Per-user, one-click: no admin rights, no wizard.
     nsis: {
       oneClick: true,
