@@ -271,6 +271,7 @@ export const statusScreens: Screen[] = [
       await expect(page.getByRole("dialog")).toBeVisible();
     },
     allowText: statusData,
+    freshOnViewport: true,
   },
   {
     id: "status-reissued",
