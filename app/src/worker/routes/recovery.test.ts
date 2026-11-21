@@ -105,6 +105,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   probe.crashAt = null;
+  probe.botTimeoutMs = null;
   await env.KV.delete("config");
   for (const prefix of ["allowlist:", "issue-email:", "status-token:", "issue-token:"]) {
     for (const { name } of (await env.KV.list({ prefix })).keys) await env.KV.delete(name);
@@ -212,14 +213,15 @@ describe("POST /api/reports/resume", () => {
   });
 
   it("treats a create that timed out as uncertain: the scan finds nothing, so a person is needed", async () => {
+    probe.botTimeoutMs = 100;
     const { credential, answer } = await interruptedSubmit(
-      createFault({ type: "timeout", holdMs: 12_000 }),
+      createFault({ type: "timeout", holdMs: 500 }),
     );
     expect(answer.status).toBe(503);
     const resumed = await post("resume", { email: listed, credential });
     expect(resumed.body["status"]).toBe("needs_help");
     expect(await issues()).toEqual([]);
-  }, 25_000);
+  });
 
   it("keeps saying saving while GitHub cannot be scanned, then settles when it can", async () => {
     const { credential } = await interruptedSubmit(createFault({ type: "lost-response" }));

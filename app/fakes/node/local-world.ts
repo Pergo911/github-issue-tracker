@@ -146,6 +146,17 @@ export function localWorldPlugin(plan: LocalWorldPlan): Plugin {
   return {
     name: "local-world",
     apply: "serve",
+    // Pass this server's fake GitHub base to the SPA via HTML metadata rather than Vite's `define`, so Vite's
+    // dependency pre-bundling hash stays identical across per-run ports and parallel servers.
+    transformIndexHtml() {
+      return [
+        {
+          tag: "meta",
+          attrs: { name: "local-world-github-api-base", content: plan.githubApiBase },
+          injectTo: "head",
+        },
+      ];
+    },
     async configureServer(server) {
       const world = createWorld({
         org: LOCAL_ORG,

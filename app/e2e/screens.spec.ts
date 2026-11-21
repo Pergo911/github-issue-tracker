@@ -3,18 +3,16 @@ import { openScreen, screens } from "./screens.ts";
 import { expectAccessible } from "./support/axe.ts";
 import { findCatalogBypasses } from "./support/pseudo-sweep.ts";
 
-// Every declared screen: no axe violation in light or dark, and no text or accessible name that bypassed
-// the catalog (the app is loaded in the test-only pseudo-language, which marks every catalog string).
+// Every declared screen: no text or accessible name that bypassed the catalog (loaded in the test-only
+// pseudo-language, which only wraps catalog strings in marks without changing DOM structure or colours), and
+// no axe violation in light or dark. Opening each screen once runs both checks in half the browser work.
 for (const screen of screens) {
-  test.describe(screen.id, () => {
-    test("has no accessibility violations", async ({ page }) => {
-      await openScreen(page, screen);
-      await expectAccessible(page);
-    });
-
-    test("shows only text from the catalog", async ({ page }) => {
-      await openScreen(page, screen, { pseudo: true });
-      expect(await findCatalogBypasses(page, screen.allowText)).toEqual([]);
-    });
+  test(screen.id, async ({ page }) => {
+    await openScreen(page, screen, { pseudo: true });
+    expect(
+      await findCatalogBypasses(page, screen.allowText),
+      "text or accessible name bypassed the catalog",
+    ).toEqual([]);
+    await expectAccessible(page);
   });
 }

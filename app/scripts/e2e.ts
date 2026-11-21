@@ -7,21 +7,30 @@
 // that has to wait for a dev server under that many browsers times out instead. Measured on the thread that added
 // the Board (#29): 12 of 23 failed at --workers=3, 3 at 2, and 23 of 23 passed at 1. To triage a failure, re-run
 // it serially:  npm run test:e2e -- <spec> --workers=1   (E2E_WORKERS overrides the default.)
+import { cpSync, existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { playwrightWorkerArgs } from "./lib/jobs.ts";
 import { prepareRun, runPlaywright } from "./lib/run.ts";
+import { APP_ROOT } from "./lib/state.ts";
 
 const requested = process.argv.slice(2);
-const hasWorkers = requested.some(
-  (argument) => argument === "--workers" || argument.startsWith("--workers="),
-);
-const workers = process.env["E2E_WORKERS"] ?? "4";
+const failureResults = join(APP_ROOT, ".tmp", "e2e-results");
 
 const run = await prepareRun();
 let code: number;
 try {
   code = await runPlaywright(
-    ["--project=chromium", ...(hasWorkers ? [] : [`--workers=${workers}`]), ...requested],
+    ["--project=chromium", ...playwrightWorkerArgs("E2E_WORKERS", requested), ...requested],
     run.env,
   );
+  // Preserve Playwright's failure evidence before `run.cleanup()` deletes the private run directory.
+  if (code !== 0) {
+    const testResults = join(run.directory, "test-results");
+    if (existsSync(testResults)) {
+      rmSync(failureResults, { recursive: true, force: true });
+      cpSync(testResults, failureResults, { recursive: true });
+    }
+  }
 } finally {
   run.cleanup();
 }

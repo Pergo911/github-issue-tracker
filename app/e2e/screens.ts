@@ -1,5 +1,6 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { referenceConfig } from "../src/shared/seed/reference-config.ts";
+import { waitForVisualSettle } from "./support/settle.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
 import { urlFor, type ServerKind } from "./support/servers.ts";
 import { adminScreens } from "./admin-screens.ts";
@@ -33,6 +34,8 @@ export interface Screen {
   allowText?: AllowedText[];
   /** `false`: swept and checked for accessibility, but no reference images (a placeholder a later ticket replaces). */
   reference?: boolean;
+  /** Reopen on a fresh page when switching viewports (for screens whose ready() opens a positioned popup or drag). */
+  freshOnViewport?: boolean;
 }
 
 export const COLOR_SCHEMES = ["light", "dark"] as const;
@@ -449,3 +452,44 @@ export async function openScreen(
 }
 
 export const referenceScreens = () => screens.filter((screen) => screen.reference !== false);
+
+/**
+ * Visits every viewport × colour-scheme variant of a screen while reusing the loaded page across variants
+ * (4 opens → 1, or 2 when `screen.freshOnViewport` needs a fresh layout/popup geometry at the second viewport).
+ */
+export async function visitScreenVariants(
+  page: Page,
+  context: BrowserContext,
+  screen: Screen,
+  visit: (
+    activePage: Page,
+    scheme: ColorScheme,
+    viewport: (typeof VIEWPORTS)[number],
+  ) => Promise<void>,
+): Promise<void> {
+  let current = page;
+  let extraPage: Page | null = null;
+  try {
+    for (const [viewportIndex, viewport] of VIEWPORTS.entries()) {
+      const reopen = viewportIndex === 0 || screen.freshOnViewport === true;
+      if (reopen && viewportIndex > 0) {
+        extraPage = await context.newPage();
+        current = extraPage;
+      }
+      await current.setViewportSize({ width: viewport.width, height: viewport.height });
+      await current.emulateMedia({ colorScheme: COLOR_SCHEMES[0] });
+      if (reopen) await openScreen(current, screen);
+      await current.mouse.move(-1, -1);
+      if (!reopen) await waitForVisualSettle(current);
+      for (const [schemeIndex, scheme] of COLOR_SCHEMES.entries()) {
+        if (schemeIndex > 0) {
+          await current.emulateMedia({ colorScheme: scheme });
+          await waitForVisualSettle(current);
+        }
+        await visit(current, scheme, viewport);
+      }
+    }
+  } finally {
+    await extraPage?.close();
+  }
+}

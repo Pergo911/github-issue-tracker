@@ -13,6 +13,7 @@ export default defineConfig([
     ".wrangler/",
     ".screenshots/",
     ".tmp/",
+    ".eslintcache",
     "playwright-report/",
     "test-results/",
     "worker-configuration.d.ts",

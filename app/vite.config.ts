@@ -43,9 +43,11 @@ export default defineConfig(async ({ command }) => {
     },
     define: {
       __PSEUDO_LANGUAGE__: JSON.stringify(process.env["VITE_PSEUDO"] === "1"),
-      ...(world
-        ? { "import.meta.env.VITE_GITHUB_API_BASE": JSON.stringify(world.githubApiBase) }
-        : {}),
+    },
+    optimizeDeps: {
+      // Scan every client route up front (including lazy `staff/` routes, excluding unit tests) so the first
+      // visit to `/staff` in end-to-end runs does not trigger on-demand re-optimization and reload the page.
+      entries: ["index.html", "src/client/**/*.{ts,tsx}", "!src/client/**/*.test.{ts,tsx}"],
     },
     cacheDir: process.env["VITE_CACHE_DIR"] ?? "node_modules/.vite",
     server: { port, strictPort: port !== undefined },
