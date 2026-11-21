@@ -146,6 +146,15 @@ export function localWorldPlugin(plan: LocalWorldPlan): Plugin {
   return {
     name: "local-world",
     apply: "serve",
+    // Point `githubApiBase()` at this server's fake GitHub without putting the per-run port in Vite's `define`,
+    // so Vite's dependency pre-bundling cache hash stays identical across ports and runs.
+    transform(code, id) {
+      if (!id.replace(/\\/g, "/").endsWith("/src/client/github/api-base.ts")) return null;
+      return code.replaceAll(
+        'import.meta.env["VITE_GITHUB_API_BASE"]',
+        JSON.stringify(plan.githubApiBase),
+      );
+    },
     async configureServer(server) {
       const world = createWorld({
         org: LOCAL_ORG,

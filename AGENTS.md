@@ -186,8 +186,9 @@ may use a fixed port or shared global state:
   screenshot and visual runs each pick free ports and a private directory under `.tmp/` for the run.
 - Local KV and Durable Object state lives in `.wrangler/state` inside the worktree (git-ignored); `PERSIST_DIR`
   moves it. `npm run reset` clears only this worktree's. The Workers debugger is off unless `INSPECTOR_PORT` is set.
-- The Docker run starts a container with a unique name on a random loopback port and mounts nothing: the dev
-  servers stay on the host and the container's browser reaches them through Playwright's tunnel.
+- The Docker run starts a container with a unique name on a random loopback port and mounts only `playwright-core`
+  read-only (no workspace state): the dev servers stay on the host and the container's browser reaches them
+  through Playwright's tunnel. In CI, `VISUAL_IN_CONTAINER=1` runs inside Playwright's container directly.
 - Run one `verify` per worktree at a time (the type check and the compile-boundary tests share `.tsbuild/`).
   `verify` takes a machine-wide lock and prints whose turn it is, so a second one queues instead of competing:
   two at once is what made recorded runs take 823s and fail `test:e2e` and `test:visual` as if the code were

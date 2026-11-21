@@ -200,6 +200,7 @@ export const boardScreens: Screen[] = [
       await expect(page.locator("[data-dnd-dragging]")).toHaveClass(/shadow-floating/);
     },
     allowText,
+    freshOnViewport: true,
   },
   {
     id: "board-card-menu",
@@ -215,6 +216,7 @@ export const boardScreens: Screen[] = [
       await expect(page.getByRole("listbox")).toBeVisible();
     },
     allowText,
+    freshOnViewport: true,
   },
   {
     id: "board-rollback",

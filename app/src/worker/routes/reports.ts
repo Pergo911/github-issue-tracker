@@ -8,7 +8,7 @@ import { normalizeEmail, validateFields } from "@shared/reports/validate.ts";
 import { registerEndpoint } from "../api/register.ts";
 import { loadConfig } from "../config/load.ts";
 import { OTP_TTL_MS, type CompletionReceipt, type RecoverView } from "../gates/email-gate.ts";
-import { reach } from "../gates/probe.ts";
+import { probe, reach } from "../gates/probe.ts";
 import { createBotClient } from "../github/bot-client.ts";
 import { injectedCreateFailures } from "../dev/local-world.ts";
 import { randomToken, sha256Hex } from "../util/crypto.ts";
@@ -140,7 +140,10 @@ export function registerReports(app: Hono<{ Bindings: Env }>): void {
       const category = config.taxonomy.category.find((value) => value.id === fields.category);
       const location = config.taxonomy.location.find((value) => value.id === fields.location);
       const initial = config.taxonomy.status.find((status) => status.initial);
-      const bot = createBotClient(env);
+      const bot = createBotClient(
+        env,
+        probe.botTimeoutMs !== null ? { timeoutMs: probe.botTimeoutMs } : {},
+      );
       // The local world can fail one address's create before it reaches GitHub (end-to-end recovery journeys).
       if (env.LOCAL_WORLD && injectedCreateFailures.delete(email)) {
         throw new Error("an injected create failure (local world)");

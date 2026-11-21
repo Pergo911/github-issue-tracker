@@ -11,6 +11,30 @@ export type ServerKind = "seeded" | "empty" | "setup";
 
 export const SERVER_KINDS: readonly ServerKind[] = ["seeded", "empty", "setup"];
 
+/**
+ * Which local servers this run started (`E2E_SERVERS`, comma-separated). Defaults to all three when unset;
+ * `test:visual` and `screenshots` omit `setup` because no declared screen may read it.
+ */
+export function activeServerKinds(
+  environment: NodeJS.ProcessEnv = process.env,
+): readonly ServerKind[] {
+  const raw = environment["E2E_SERVERS"]?.trim();
+  if (!raw) return SERVER_KINDS;
+  const kinds: ServerKind[] = [];
+  for (const part of raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)) {
+    if (!SERVER_KINDS.includes(part as ServerKind)) {
+      throw new Error(
+        `Unknown server kind "${part}" in E2E_SERVERS (expected: ${SERVER_KINDS.join(", ")})`,
+      );
+    }
+    kinds.push(part as ServerKind);
+  }
+  return kinds.length > 0 ? kinds : SERVER_KINDS;
+}
+
 function requiredEnvironment(name: string): string {
   const value = process.env[name];
   if (!value) {

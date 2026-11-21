@@ -25,3 +25,38 @@ export function jobLimit(requested: string | undefined, logicalCpus: number): nu
 export function machineJobLimit(environment: NodeJS.ProcessEnv = process.env): number {
   return jobLimit(environment["VERIFY_JOBS"], cpus().length);
 }
+
+/**
+ * Default Playwright browser workers: match small CI runners (2 on a 2-vCPU runner) and cap at four on larger
+ * laptops so parallel browsers do not thrash memory (Playwright's own default of half the threads was 11 on a
+ * 22-thread box and caused timeouts and 9s/shot thrashing).
+ */
+export function defaultPlaywrightWorkers(logicalCpus: number): number {
+  return Math.max(1, Math.min(CEILING, logicalCpus));
+}
+
+/** An explicit positive whole number wins; anything else falls back to `defaultPlaywrightWorkers`. */
+export function playwrightWorkers(requested: string | undefined, logicalCpus: number): number {
+  const parsed = Number(requested);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultPlaywrightWorkers(logicalCpus);
+}
+
+/** The Playwright worker count this machine and environment variable ask for. */
+export function machinePlaywrightWorkers(
+  envVar: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): number {
+  return playwrightWorkers(environment[envVar], cpus().length);
+}
+
+/** True when the caller already passed Playwright's `--workers` or `-j` flag. */
+export function hasWorkersFlag(args: readonly string[]): boolean {
+  return args.some(
+    (argument) =>
+      argument === "--workers" ||
+      argument.startsWith("--workers=") ||
+      argument === "-j" ||
+      argument.startsWith("-j=") ||
+      /^-j\d+$/.test(argument),
+  );
+}

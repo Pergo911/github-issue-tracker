@@ -170,6 +170,7 @@ const pickerScreen = (id: string, index: number, description: string): Screen =>
     await expect(page.getByRole("listbox")).toBeVisible();
   },
   allowText: detailData,
+  freshOnViewport: true,
 });
 
 const closeScreen = (reason: number, id: string): Screen => ({
