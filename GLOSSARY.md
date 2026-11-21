@@ -36,7 +36,7 @@ _Avoid_: Issue view, tracking page
 
 **Staff dashboard**:
 The GitHub-login surface Staff work Reports from: the Board, List and Detail views, plus the System admin's
-Allowlist and Configuration screens.
+Allowlist, Staff and Configuration screens.
 _Avoid_: Admin panel, back office
 
 ### Reports and people
@@ -92,8 +92,12 @@ Staff who triage, categorize, assign and resolve Reports.
 _Avoid_: Technician, agent
 
 **System admin**:
-Staff who also manage membership, the Allowlist and the Deployment's settings.
+Staff who also manage Staff roles, the Allowlist and the Deployment's settings.
 _Avoid_: Administrator, superuser
+
+**Staff invitation**:
+A pending GitHub repository invitation granting a GitHub account a Staff role on a Deployment's reports repo once accepted.
+_Avoid_: Pending member, invite link
 
 ### Classification
 

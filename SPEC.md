@@ -63,7 +63,7 @@ Three separate user-facing surfaces, sharing one GitHub Organization repo as the
    │  - webhook receiver (major-change filter)  │         installation token)
    │  - reissue link (holder or staff)          │
    │  - (staff) reveal-contact / resend-link     │
-   │  - (System admin) allowlist management     │
+   │  - (System admin) allowlist, staff, config │
    └───────────────────┬─────────────────────────┘
                         │
                         ▼
@@ -215,7 +215,7 @@ repo `reports`); the names are chosen when the Deployment's GitHub Organization 
 
 The dashboard is the SPA's staff surface. It calls `api.github.com` directly with the staff member's device-flow
 token (§2.2), and it gates its own controls on the repo `permissions` object — but that client-side gating is
-presentation only: every Worker endpoint it can reach (reveal-contact, reissue, Allowlist, configuration)
+presentation only: every Worker endpoint it can reach (reveal-contact, reissue, Allowlist, Staff, configuration)
 re-checks the role with the caller's token, so the tiers are enforced server-side
 ([ticket](https://github.com/Pergo911/github-issue-tracker/issues/14)).
 
@@ -226,12 +226,12 @@ because Write and Maintain add only code access the dashboard never uses (issue 
 | ----------------- | ---------------- | ---------------------------------------------------------------------------------------- |
 | Viewer            | Read             | the views and commenting; every action control hidden; never reveal-contact (§4.4)       |
 | Maintenance staff | Triage or better | everything on Reports: labels, assignee, close/reopen, comments, reissue, reveal-contact |
-| System admin      | Admin            | Maintenance staff plus the Allowlist and Configuration screens                           |
+| System admin      | Admin            | Maintenance staff plus the Allowlist, Staff and Configuration screens                    |
 
 A Viewer can comment but cannot label, assign or close anyone's Report — the Bot opened them all, so "close your
 own" never applies.
 
-**Views.** Three Report views, plus the two Admin screens below. No metrics or insights view in the MVP.
+**Views.** Three Report views, plus the three Admin screens below. No metrics or insights view in the MVP.
 
 - **Board** — a Kanban view over open Reports, one column per Status in the configured order plus the exceptional
   column below. Cards carry the title, category/location/priority chips, assignee, age and a reporter-comment mark
@@ -242,7 +242,7 @@ own" never applies.
 - **Detail** — one Report: the canonical body envelopes decoded and rendered as plain text (no markdown pipeline,
   §4.1), labels, assignee, and the timeline with Bot-authored canonical Reporter comments distinguished from
   Staff comments (§4.3); a comment box is a Viewer's only write.
-- **Allowlist** and **Configuration** — Admin-only (§5, below).
+- **Allowlist**, **Staff** and **Configuration** — Admin-only (§5, below).
 
 The board and list refresh on navigation and via a manual refresh control; there is no live push (the webhook
 reaches the Worker, §3.2, not the SPA).
@@ -278,6 +278,33 @@ GitHub's own notifications already reach assignees and watchers.
 
 **No bulk actions in the MVP.** The REST API the dashboard uses has no bulk issue endpoints, and GraphQL batching
 would buy nothing at this volume.
+
+**The Staff screen** (Admin-only, `/staff/members`;
+[ADR 0006](./docs/adr/0006-manage-staff-roles-as-repo-collaborators-via-staff-token.md)) manages Staff roles on the
+`reports` repo directly in the dashboard while keeping GitHub repository roles as the single source of truth.
+Admin-gated Worker endpoints run all collaborator and invitation calls with the acting System admin's own token
+(`reports-staff`, which holds Repository `Administration: read & write`, §3.3; no GitHub Organization-level
+permissions and no added permissions on `reports-bot`).
+
+- **Scope and roles.** Strictly repository collaborators and pending Staff invitations on `reports` (no GitHub
+  Organization membership management; Reporters stay on the Allowlist, §5). Adding Staff is a single-user form taking a GitHub
+  username and one of the three dashboard roles (**Viewer** → `pull`, **Maintenance staff** → `triage`,
+  **System admin** → `admin`). Existing GitHub Organization members receive access immediately (`204`); external
+  GitHub accounts receive an outside-collaborator repository invitation (`201`), managed in a **Pending invitations**
+  section (change invited role or cancel). Existing GitHub `Write` and `Maintain` grants display cleanly as
+  Maintenance staff and are replaced with `pull`/`triage`/`admin` only when a System admin actively changes the
+  member's dashboard role. Adding someone who is already active Staff or already has a pending invitation is rejected
+  explicitly rather than overwriting their role.
+- **Safety guards (server-enforced).** A System admin cannot change their own role or remove themselves, and cannot
+  demote or remove the last active effective System admin (counting every active Staff member whose effective role is
+  `admin`, including inherited GitHub Organization Owners, and never counting pending invitations). Inherited-only
+  members (`affiliation=all` minus `affiliation=direct`) appear read-only; if a direct downgrade or removal is
+  overridden by an overlapping GitHub Organization or team grant, a post-write effective-permission check surfaces an explicit
+  warning. Role changes use an inline Edit/Save/Cancel flow, and Remove uses an inline danger confirmation warning
+  that access ends immediately and open Reports assigned to them will be unassigned. If `reports-staff` lacks the
+  approved `Administration: read & write` permission or the caller's token predates it, the Worker returns a dedicated
+  `staff_permission_required` error shown only on the Staff screen without disrupting Reports, Allowlist, or
+  Configuration.
 
 **The Configuration screen** (Admin-only) edits every per-Deployment value that is data: the Taxonomy — each
 dimension's values, display names, colours and order, and the Status flags (§2.3) — the emergency notice (§2.3), the
@@ -571,11 +598,16 @@ needed, which Workers/Edge functions can't easily do anyway).
   the staff app's name, issue comments show the Bot's avatar; separate suspension surfaces — suspending the Bot
   never logs staff out; and no OAuth/device-flow surface on the automation credential that never needs it. One
   extra registration per Deployment is configuration, not code.
-- **Permission matrix (both apps): `metadata: read` + `issues: read & write`.** Staff user tokens call
-  `api.github.com` client-side, still gated by the member's own repo role — the repo `permissions` object
-  reflects Triage (spike-verified). Bot installation tokens create issues, create and swap the taxonomy labels,
-  post `Reporter:`-marked comments, and read issues for the status page. Removing a member from the repo or the GitHub Organization
-  drops their role and the role check denies (404 / no `permissions`) — offboarding is self-locking.
+- **Permission matrix:** `reports-bot` keeps **`metadata: read` + `issues: read & write`** (never repository
+  `administration`); `reports-staff` has **`metadata: read` + `issues: read & write` + `administration: read & write`**
+  so System admins can manage Staff collaborators and invitations through the Worker (§2.4,
+  [ADR 0006](./docs/adr/0006-manage-staff-roles-as-repo-collaborators-via-staff-token.md)). Because GitHub intersects
+  a GitHub App user token with the caller's own repo role, Viewers and Maintenance staff gain no administrative
+  power. Staff user tokens call `api.github.com` client-side for Report views and actions, still gated by the member's
+  own repo role — the repo `permissions` object reflects Triage (spike-verified). Bot installation tokens create issues,
+  create and swap the taxonomy labels, post `Reporter:`-marked comments, and read issues for the status page. Removing
+  a member from the repo or the GitHub Organization drops their role and the role check denies (404 / no `permissions`)
+  — offboarding is self-locking.
 - **Real-world precedent exists:** [Staticman](https://github.com/eduardoboucas/staticman) uses exactly this
   shape — a bot-account credential turning anonymous public form submissions into GitHub writes (commits/PRs in
   its case) specifically so the visitor never needs a GitHub identity. "Form → bot creates a GitHub issue" is
@@ -1130,7 +1162,7 @@ about a minute (KV propagation, which also caches "not found").
 | Users can comment on their own reports (instructor)                | Comment box on the status page (§4.3). A token-gated Worker function posts the comment as the bot with a `Reporter:` marker; the reporter needs no GitHub account and no email is written to GitHub.                                                                                                      |
 | Authorized users review, categorize, prioritize, assign            | Staff with GitHub Triage/Admin roles: labels (`category:*`, `priority:*`) + assignee.                                                                                                                                                                                                                     |
 | Repair progress trackable; completed-work info recorded            | Open/closed + `status:*` labels (§2.3; no Projects v2); resolution notes as issue comments. Major transitions are mirrored out via email to the reporter.                                                                                                                                                 |
-| Multiple roles with different permissions                          | Reporter is "anyone on the allowlist who completes OTP" (not a GitHub role). Maintenance staff = repo Triage; system admin = repo Admin (manages members and the Reporter Allowlist; staff onboarding is a GitHub Organization invite, automatable via the membership API).                               |
+| Multiple roles with different permissions                          | Reporter is "anyone on the allowlist who completes OTP" (not a GitHub role). Viewer = repo Read; Maintenance staff = repo Triage; System admin = repo Admin (manages Staff roles on `reports`, the Reporter Allowlist, and Deployment configuration from the Staff dashboard; §2.4, ADR 0006). |
 | Search / overview by open, in progress, closed                     | GitHub search qualifiers and label filters in the staff dashboard (no Projects v2, §2.3).                                                                                                                                                                                                                 |
 | Desktop application (the brief's first sentence)                   | A thin Windows-only Electron shell around the hosted SPA, which also runs as a plain website (§2.1).                                                                                                                                                                                                      |
 
@@ -1314,6 +1346,15 @@ relevant design sections; they are not claims that the application already exist
     the live evidence proves the tested body/comment properties, not the title policy
     ([Status views, neutralization and failure paths](https://github.com/Pergo911/github-issue-tracker/issues/18)).
     The title policy was then live-tested on REST and GraphQL and its allowlist adjusted (§4.1, ticket #32).
+23. **Staff role management in the Admin UI** — **resolved.** System admins manage Staff roles and pending Staff
+    invitations on the `reports` repo from a dedicated **Staff** screen (`/staff/members`), keeping GitHub
+    repository roles as the single source of truth. Repository `Administration: read & write` is added to
+    `reports-staff` only (`reports-bot` stays minimal; no GitHub Organization-level permissions), and Admin-gated
+    Worker endpoints execute collaborator/invitation operations using `caller.token`, enforcing self-lockout and
+    last-active-System-admin guards server-side, treating inherited-only members read-only with post-write override
+    detection, and surfacing missing App permission / stale tokens via `staff_permission_required` (§2.4, §3.3,
+    [ADR 0006](./docs/adr/0006-manage-staff-roles-as-repo-collaborators-via-staff-token.md),
+    [ticket](https://github.com/Pergo911/github-issue-tracker/issues/40)).
 
 ---
 
