@@ -615,6 +615,113 @@ for (const entry of targets) {
         expect(refresh.json.error).toBe("incorrect_client_credentials");
       });
     });
+
+    describe("collaborators and invitations (ADR 0006)", () => {
+      const liveWriteSkip =
+        entry.name !== "fake" && !(process.env["CONTRACT_LIVE_TEST_USER"]?.trim() ?? "");
+
+      it("reads collaborators (affiliation=all and direct), effective permissions, and pending invitations with the operator token, while refusing the Bot", async () => {
+        const me = await t.github("GET", "/user", { token: operator });
+        expectStatus(me, 200);
+        const operatorLogin: string = me.json.login;
+
+        const all = await t.github("GET", t.path("/collaborators"), {
+          token: operator,
+          query: { affiliation: "all", per_page: 100 },
+        });
+        expectStatus(all, 200);
+        expect(Array.isArray(all.json)).toBe(true);
+        const self = all.json.find(
+          (user: { login: string }) => user.login.toLowerCase() === operatorLogin.toLowerCase(),
+        );
+        expect(self).toBeTruthy();
+        expect(self.permissions?.admin).toBe(true);
+        expect(self.role_name).toBe("admin");
+
+        const direct = await t.github("GET", t.path("/collaborators"), {
+          token: operator,
+          query: { affiliation: "direct", per_page: 100 },
+        });
+        expectStatus(direct, 200);
+        expect(Array.isArray(direct.json)).toBe(true);
+
+        const perm = await t.github(
+          "GET",
+          t.path(`/collaborators/${encodeURIComponent(operatorLogin)}/permission`),
+          { token: operator },
+        );
+        expectStatus(perm, 200);
+        expect(perm.json).toMatchObject({ permission: "admin", role_name: "admin" });
+
+        const invitations = await t.github("GET", t.path("/invitations"), {
+          token: operator,
+          query: { per_page: 100 },
+        });
+        expectStatus(invitations, 200);
+        expect(Array.isArray(invitations.json)).toBe(true);
+
+        // reports-bot never holds Repository Administration permission (ADR 0006).
+        const botInvitations = await github("GET", "/invitations");
+        expectStatus(botInvitations, 403);
+      });
+
+      it.skipIf(liveWriteSkip)(
+        "invites an outside user, updates the invitation role, and cancels the invitation",
+        async () => {
+          const username = t.inviteTestUser();
+          expect(username).toBeTruthy();
+          let invitationId: number | null = null;
+          try {
+            const invited = await t.github(
+              "PUT",
+              t.path(`/collaborators/${encodeURIComponent(username!)}`),
+              { token: operator, json: { permission: "pull" } },
+            );
+            expectStatus(invited, 201);
+            expect(invited.json.permissions).toBe("read");
+            expect(invited.json.invitee?.login.toLowerCase()).toBe(username!.toLowerCase());
+            invitationId = invited.json.id as number;
+
+            const listed = await t.github("GET", t.path("/invitations"), {
+              token: operator,
+              query: { per_page: 100 },
+            });
+            expectStatus(listed, 200);
+            expect(
+              listed.json.some(
+                (inv: { id: number; permissions: string }) =>
+                  inv.id === invitationId && inv.permissions === "read",
+              ),
+            ).toBe(true);
+
+            const patched = await t.github("PATCH", t.path(`/invitations/${invitationId}`), {
+              token: operator,
+              json: { permissions: "triage" },
+            });
+            expectStatus(patched, 200);
+            expect(patched.json).toMatchObject({ id: invitationId, permissions: "triage" });
+
+            const cancelled = await t.github("DELETE", t.path(`/invitations/${invitationId}`), {
+              token: operator,
+            });
+            expectStatus(cancelled, 204);
+            const removedId = invitationId;
+            invitationId = null;
+
+            const after = await t.github("GET", t.path("/invitations"), {
+              token: operator,
+              query: { per_page: 100 },
+            });
+            expectStatus(after, 200);
+            expect(after.json.some((inv: { id: number }) => inv.id === removedId)).toBe(false);
+          } finally {
+            if (invitationId !== null) {
+              await t.github("DELETE", t.path(`/invitations/${invitationId}`), { token: operator });
+            }
+          }
+        },
+      );
+    });
   });
 }
 

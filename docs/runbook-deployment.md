@@ -16,12 +16,20 @@ the Windows app opens that same HTTPS origin. See [SPEC §2](../SPEC.md#2-archit
 1. Create a GitHub Organization and private `reports` and `reports-sandbox` repositories. Enable
    **Settings → Member privileges → Issue deletion**. Give Staff repo Read (Viewer), Triage
    (Maintenance staff), or Admin (System admin). Reporters receive no GitHub access.
-2. Register two GitHub Apps, restricted to this GitHub Organization, with **Metadata: read** and
-   **Issues: read and write**, no other permissions. Disable each App's webhook.
-   - Staff App: enable Device Flow and expiring user authorization tokens. Record its Client ID.
-     No callback or client secret is needed.
-   - Bot App: leave Device Flow disabled. Generate and download a private key. Record its App ID.
-     Install both on the two repositories only; record the Bot installation ID from the settings URL.
+2. Register two GitHub Apps, restricted to this GitHub Organization, with no GitHub Organization-level
+   permissions. Disable each App's webhook.
+   - Staff App (`reports-staff`): grant repository **Metadata: read**, **Issues: read and write**,
+     and **Administration: read and write** (so System admins can manage Staff roles from the Staff
+     dashboard; Viewers and Maintenance staff gain no admin rights). Enable Device Flow and expiring
+     user authorization tokens. Record its Client ID. No callback or client secret is needed.
+   - Bot App (`reports-bot`): grant repository **Metadata: read** and **Issues: read and write**
+     only (never `Administration`). Leave Device Flow disabled. Generate and download a private key.
+     Record its App ID.
+   - Install both on the two repositories only; record the Bot installation ID from the settings URL.
+   - *Upgrading an existing Deployment:* when adding **Administration: read and write** to an
+     existing Staff App, approve the updated permissions in the GitHub Organization's App
+     installation settings. Already-signed-in System admins may need to sign out and sign in again
+     before the Staff screen loads.
 3. Create a Cloudflare account, choose its `workers.dev` subdomain, and run `npx wrangler login`
    from `app/`, approving the browser prompt.
 4. In Resend, add and verify a dedicated `mail.<your-domain>` sending subdomain in the EU (Ireland)
@@ -133,7 +141,7 @@ and retry cleanup. Notifications are best-effort: inspect GitHub webhook deliver
 email is absent. GitHub does not automatically retry failed deliveries.
 
 Screenshots go to `app/.screenshots/live/`: home, form, the temporary Report's Status page, and
-Staff List, Board, Detail, Allowlist and Configuration, at 1280/375 px in light/dark. The browser
+Staff List, Board, Detail, Allowlist, Staff and Configuration, at 1280/375 px in light/dark. The browser
 is temporary; the operator token is seeded into the SPA's normal `staff.tokens` storage only for
 these captures. No device-flow approval is automated and no browser storage state is saved.
 Open every image and check Hungarian wording, layout, clipping and theme against

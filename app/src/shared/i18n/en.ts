@@ -60,6 +60,7 @@ export const en = {
   "staff.nav.label": "Staff navigation",
   "staff.nav.reports": "Reports",
   "staff.nav.allowlist": "Allowlist",
+  "staff.nav.members": "Staff",
   "staff.nav.configuration": "Configuration",
   "staff.role.viewer": "Viewer",
   "staff.role.maintenance": "Maintenance staff",
@@ -339,6 +340,21 @@ export const en = {
   "api.error.already_listed": "This address is already on the list.",
   "api.error.too_many_entries": "A list can have at most 500 addresses at a time.",
   "api.error.invalid_config": "The configuration was not accepted. Check the marked fields.",
+  "api.error.staff_permission_required":
+    "Staff management needs Repository Administration (read & write) permission on the Staff GitHub App. Approve the permission update in GitHub, then sign out and sign in again.",
+  "api.error.already_staff":
+    "This GitHub account already has Staff access. Change their role in Active staff below.",
+  "api.error.already_invited":
+    "This GitHub account already has a pending invitation. Edit or cancel it in Pending invitations below.",
+  "api.error.github_user_not_found":
+    "No GitHub account with this username was found. Check the spelling and try again.",
+  "api.error.cannot_modify_self": "You cannot change your own role or remove yourself.",
+  "api.error.last_admin_required":
+    "At least one active System admin must remain. Add or promote another active System admin first.",
+  "api.error.inherited_member_readonly":
+    "This member's access comes from the GitHub Organization or a team. Manage it in GitHub.",
+  "api.error.invalid_username":
+    "Enter a valid GitHub username (letters, digits and single hyphens, up to 39 characters; not an email address).",
   "allowlist.title": "Allowlist",
   "allowlist.intro":
     "Only these addresses can ask for a code to submit a report. Changes take about a minute to apply.",
@@ -382,6 +398,73 @@ export const en = {
     "This address can no longer ask for a code. Their existing reports, links and notifications stay as they are.",
   "allowlist.remove.confirm": "Remove the address",
   "allowlist.remove.cancel": "Keep it",
+  "members.title": "Staff",
+  "members.intro":
+    "Manage Staff roles on the reports repository. Reporters do not receive Staff accounts and stay on the Allowlist.",
+  "members.intro.allowlistLink": "Open Allowlist",
+  "members.loading": "Loading staff…",
+  "members.error.title": "Staff could not be loaded",
+  "members.permissionRequired.title": "GitHub App permission update required",
+  "members.permissionRequired.description":
+    "Grant Repository Administration (read & write) to the Staff GitHub App, approve the permission update in your GitHub Organization, then sign out and sign in again. Reports, Allowlist and Configuration continue to work normally.",
+  "members.override.downgrade.title": "Inherited GitHub access kept a higher role",
+  "members.override.downgrade.description":
+    "The direct repository role for {login} was updated, but an overlapping GitHub Organization or team grant keeps their effective role higher. Change or remove that grant in GitHub to lower their access.",
+  "members.override.remove.title": "Direct access removed, but inherited access remains",
+  "members.override.remove.description":
+    "The direct repository access for {login} was removed, but an overlapping GitHub Organization or team grant still keeps their access. Remove that grant in GitHub to end their access.",
+  "members.override.effectiveRole": "Effective role:",
+  "members.notice.dismiss": "Dismiss",
+  "members.add.title": "Add a staff member",
+  "members.add.username": "GitHub username",
+  "members.add.usernameHint":
+    "Enter one GitHub username. Existing GitHub Organization members get access immediately; external accounts receive a GitHub repository invitation.",
+  "members.add.role": "Role",
+  "members.add.submit": "Add staff member",
+  "members.add.submitting": "Adding…",
+  "members.add.added.title": "Access granted",
+  "members.add.added.description": "{login} now has immediate access to the Staff dashboard.",
+  "members.add.invited.title": "Invitation sent on GitHub",
+  "members.add.invited.description":
+    "A repository invitation was sent to {login} on GitHub. They will appear in Active staff once they accept it.",
+  "members.add.assignedRole": "Role:",
+  "members.active.title": "Active staff",
+  "members.active.count": "Members: {count}",
+  "members.active.empty": "No active staff members found.",
+  "members.badge.self": "You",
+  "members.badge.inherited": "Managed in GitHub Organization",
+  "members.guard.selfAndLastAdmin":
+    "You cannot change or remove your own access, and at least one active System admin is required.",
+  "members.guard.self": "You cannot change or remove your own access.",
+  "members.guard.lastAdmin": "At least one active System admin is required.",
+  "members.guard.inherited": "Change or remove access in the GitHub Organization.",
+  "members.role.edit": "Change role",
+  "members.role.label": "Role for {login}",
+  "members.role.save": "Save",
+  "members.role.saving": "Saving…",
+  "members.role.cancel": "Cancel",
+  "members.remove": "Remove",
+  "members.remove.title": "Remove {login}?",
+  "members.remove.description":
+    "Their access ends immediately, and any open reports assigned to them will be unassigned. Their wider GitHub Organization membership is not changed.",
+  "members.remove.confirm": "Remove access",
+  "members.remove.removing": "Removing…",
+  "members.remove.cancel": "Keep access",
+  "members.invitations.title": "Pending invitations",
+  "members.invitations.count": "Pending: {count}",
+  "members.invitations.empty": "No pending invitations.",
+  "members.invitations.meta": "Invited by {login}, {date}",
+  "members.invitations.metaDateOnly": "Invited {date}",
+  "members.invitations.expired": "Expired",
+  "members.invitations.edit": "Change role",
+  "members.invitations.roleLabel": "Invited role for {login}",
+  "members.invitations.cancel": "Cancel invitation",
+  "members.invitations.cancelTitle": "Cancel invitation for {login}?",
+  "members.invitations.cancelDescription":
+    "The pending GitHub invitation will be withdrawn immediately. You can invite them again later.",
+  "members.invitations.cancelConfirm": "Cancel invitation",
+  "members.invitations.cancelling": "Cancelling…",
+  "members.invitations.keep": "Keep invitation",
   "config.title": "Configuration",
   "config.intro":
     "Saving also updates the labels in the reports repository: missing labels are created and colours corrected. Labels are never deleted or renamed.",

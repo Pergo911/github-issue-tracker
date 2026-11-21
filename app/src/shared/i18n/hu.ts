@@ -55,6 +55,7 @@ export const hu = {
   "staff.nav.label": "Munkatársi navigáció",
   "staff.nav.reports": "Bejelentések",
   "staff.nav.allowlist": "Bejelentők listája",
+  "staff.nav.members": "Munkatársak",
   "staff.nav.configuration": "Beállítások",
   "staff.role.viewer": "Megtekintő",
   "staff.role.maintenance": "Karbantartó",
@@ -338,6 +339,22 @@ export const hu = {
   "api.error.already_listed": "Ez a cím már szerepel a listán.",
   "api.error.too_many_entries": "Egyszerre legfeljebb 500 cím vehető fel.",
   "api.error.invalid_config": "A beállításokat nem fogadtuk el. Nézze meg a megjelölt mezőket.",
+  "api.error.staff_permission_required":
+    "A munkatársak kezeléséhez tárolószintű Administration (olvasás és írás) jogosultság szükséges a munkatársi GitHub-alkalmazáshoz. Hagyja jóvá a jogosultság frissítését a GitHubon, majd jelentkezzen ki és be újra.",
+  "api.error.already_staff":
+    "Ennek a GitHub-fióknak már van munkatársi hozzáférése. A szerepkörét az alábbi aktív listában módosíthatja.",
+  "api.error.already_invited":
+    "Ennek a GitHub-fióknak már van függőben lévő meghívója. A meghívót az alábbi listában módosíthatja vagy vonhatja vissza.",
+  "api.error.github_user_not_found":
+    "Nem található ilyen felhasználónevű GitHub-fiók. Ellenőrizze a helyesírást, és próbálja újra.",
+  "api.error.cannot_modify_self":
+    "A saját szerepkörét nem módosíthatja, és saját magát nem távolíthatja el.",
+  "api.error.last_admin_required":
+    "Legalább egy aktív rendszergazdának maradnia kell. Előbb vegyen fel vagy léptessen elő egy másik aktív rendszergazdát.",
+  "api.error.inherited_member_readonly":
+    "Ennek a munkatársnak a hozzáférése a GitHub-szervezetből vagy egy csapatból származik. A GitHubon kezelheti.",
+  "api.error.invalid_username":
+    "Adjon meg érvényes GitHub-felhasználónevet (betűk, számjegyek és egyes kötőjelek, legfeljebb 39 karakter; nem e-mail-cím).",
   "allowlist.title": "Bejelentők listája",
   "allowlist.intro":
     "Csak ezek a címek kérhetnek kódot hibabejelentéshez. A változtatások nagyjából egy perc alatt lépnek életbe.",
@@ -381,6 +398,73 @@ export const hu = {
     "Ez a cím többé nem kérhet kódot. A meglévő bejelentések, hivatkozások és értesítések változatlanok maradnak.",
   "allowlist.remove.confirm": "Cím eltávolítása",
   "allowlist.remove.cancel": "Marad",
+  "members.title": "Munkatársak",
+  "members.intro":
+    "Itt kezelheti a munkatársi szerepköröket a bejelentések tárolóján. A bejelentők nem kapnak munkatársi fiókot, továbbra is a bejelentők listáján kezelhetők.",
+  "members.intro.allowlistLink": "Bejelentők listájának megnyitása",
+  "members.loading": "Munkatársak betöltése…",
+  "members.error.title": "A munkatársakat nem sikerült betölteni",
+  "members.permissionRequired.title": "GitHub-alkalmazás jogosultságának frissítése szükséges",
+  "members.permissionRequired.description":
+    "Adjon tárolószintű Administration (olvasás és írás) jogosultságot a munkatársi GitHub-alkalmazásnak, hagyja jóvá a jogosultság frissítését a GitHub-szervezetben, majd jelentkezzen ki és be újra. A Bejelentések, a Bejelentők listája és a Beállítások addig is zavartalanul működnek.",
+  "members.override.downgrade.title": "Örökölt GitHub-jogosultság magasabb szerepkört tartott fenn",
+  "members.override.downgrade.description":
+    "{login} közvetlen tárolószerepköre frissült, de egy átfedő GitHub-szervezeti vagy csapatjogosultság magasabb szinten tartja a tényleges hozzáférését. A csökkentéshez módosítsa vagy távolítsa el azt a GitHubon.",
+  "members.override.remove.title": "A közvetlen hozzáférés megszűnt, de örökölt jogosultság maradt",
+  "members.override.remove.description":
+    "{login} közvetlen tárolóhozzáférését eltávolítottuk, de egy átfedő GitHub-szervezeti vagy csapatjogosultság továbbra is fenntartja a hozzáférését. A hozzáférés megszüntetéséhez távolítsa el azt a GitHubon.",
+  "members.override.effectiveRole": "Tényleges szerepkör:",
+  "members.notice.dismiss": "Bezárás",
+  "members.add.title": "Munkatárs hozzáadása",
+  "members.add.username": "GitHub-felhasználónév",
+  "members.add.usernameHint":
+    "Adjon meg egy GitHub-felhasználónevet. A meglévő GitHub-szervezeti tagok azonnal hozzáférést kapnak, a külső fiókok GitHub-meghívót kapnak.",
+  "members.add.role": "Szerepkör",
+  "members.add.submit": "Munkatárs hozzáadása",
+  "members.add.submitting": "Hozzáadás…",
+  "members.add.added.title": "Hozzáférés megadva",
+  "members.add.added.description": "{login} azonnal hozzáférést kapott a munkatársi felülethez.",
+  "members.add.invited.title": "Meghívó elküldve a GitHubon",
+  "members.add.invited.description":
+    "Tárolómeghívót küldtünk {login} részére a GitHubon. Amint elfogadja, megjelenik az aktív munkatársak között.",
+  "members.add.assignedRole": "Szerepkör:",
+  "members.active.title": "Aktív munkatársak",
+  "members.active.count": "Munkatársak: {count}",
+  "members.active.empty": "Nem található aktív munkatárs.",
+  "members.badge.self": "Ön",
+  "members.badge.inherited": "GitHub-szervezetben kezelve",
+  "members.guard.selfAndLastAdmin":
+    "Saját hozzáférését nem módosíthatja és nem távolíthatja el, és legalább egy aktív rendszergazdára szükség van.",
+  "members.guard.self": "Saját hozzáférését nem módosíthatja és nem távolíthatja el.",
+  "members.guard.lastAdmin": "Legalább egy aktív rendszergazdára szükség van.",
+  "members.guard.inherited": "A hozzáférés a GitHub-szervezetben módosítható vagy vonható vissza.",
+  "members.role.edit": "Szerepkör módosítása",
+  "members.role.label": "{login} szerepköre",
+  "members.role.save": "Mentés",
+  "members.role.saving": "Mentés…",
+  "members.role.cancel": "Mégse",
+  "members.remove": "Eltávolítás",
+  "members.remove.title": "Eltávolítja {login} hozzáférését?",
+  "members.remove.description":
+    "A hozzáférése azonnal megszűnik, és a hozzá rendelt nyitott bejelentésekről lekerül a felelős. A tágabb GitHub-szervezeti tagsága nem változik.",
+  "members.remove.confirm": "Hozzáférés eltávolítása",
+  "members.remove.removing": "Eltávolítás…",
+  "members.remove.cancel": "Marad",
+  "members.invitations.title": "Függőben lévő meghívók",
+  "members.invitations.count": "Függőben: {count}",
+  "members.invitations.empty": "Nincs függőben lévő meghívó.",
+  "members.invitations.meta": "Meghívta: {login}, {date}",
+  "members.invitations.metaDateOnly": "Meghívva: {date}",
+  "members.invitations.expired": "Lejárt",
+  "members.invitations.edit": "Szerepkör módosítása",
+  "members.invitations.roleLabel": "{login} meghívott szerepköre",
+  "members.invitations.cancel": "Meghívó visszavonása",
+  "members.invitations.cancelTitle": "Visszavonja {login} meghívóját?",
+  "members.invitations.cancelDescription":
+    "A függőben lévő GitHub-meghívót azonnal visszavonjuk. Később bármikor meghívhatja újra.",
+  "members.invitations.cancelConfirm": "Meghívó visszavonása",
+  "members.invitations.cancelling": "Visszavonás…",
+  "members.invitations.keep": "Marad",
   "config.title": "Beállítások",
   "config.intro":
     "A mentés a bejelentések tárolójának címkéit is frissíti: a hiányzó címkék létrejönnek, a színek javításra kerülnek. Címkét soha nem törlünk és nem nevezünk át.",
