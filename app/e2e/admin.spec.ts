@@ -164,6 +164,10 @@ test.describe("who can reach the Admin screens", () => {
         headers: { authorization: `Bearer ${token}` },
       });
       expect(refused.status()).toBe(403);
+      const refusedMembers = await request.get(urlFor("seeded", "/api/staff/members"), {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(refusedMembers.status()).toBe(403);
       const refusedConfig = await request.get(urlFor("seeded", "/api/staff/config"), {
         headers: { authorization: `Bearer ${token}` },
       });
@@ -171,14 +175,18 @@ test.describe("who can reach the Admin screens", () => {
     }
     const { token } = await staffToken("e2e-nonadmin-page", "maintenance");
     await startSignedIn(page, token);
-    for (const path of ["/staff/allowlist", "/staff/configuration"]) {
+    for (const path of ["/staff/allowlist", "/staff/members", "/staff/configuration"]) {
       await page.goto(urlFor("seeded", path));
       await expect(page.getByRole("heading", { level: 1, name: hu["reports.title"] })).toBeVisible({
         timeout: 30_000,
       });
       await expect(page).toHaveURL(/\/staff\/reports/);
     }
-    for (const name of [hu["staff.nav.allowlist"], hu["staff.nav.configuration"]]) {
+    for (const name of [
+      hu["staff.nav.allowlist"],
+      hu["staff.nav.members"],
+      hu["staff.nav.configuration"],
+    ]) {
       await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
     }
   });

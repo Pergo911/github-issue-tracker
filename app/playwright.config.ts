@@ -74,6 +74,7 @@ export default defineConfig({
         "submission.spec.ts",
         "recovery.spec.ts",
         "staff.spec.ts",
+        "staff-members.spec.ts",
         "admin.spec.ts",
         "status.spec.ts",
         "webhook.spec.ts",

@@ -22,6 +22,12 @@ export interface ReportSpec {
 export interface StaffSpec {
   login: string;
   role: RepoRole;
+  /** Optional inherited GitHub Organization or team role on the repo (default `"none"`). */
+  inheritedRole?: RepoRole;
+  /** Whether the user is a member of the GitHub Organization (default: `true` when any role is granted). */
+  orgMember?: boolean;
+  /** Whether this user's Staff token carries Repository `Administration: read & write` (default `true`). */
+  hasAdminPermission?: boolean;
 }
 
 export interface StaffGrant extends StaffSpec {
@@ -57,6 +63,8 @@ export interface Violation {
 export interface WorldSettings {
   unknownLabels?: "create" | "ignore";
   triageCanLabel?: boolean;
+  /** Whether the Staff GitHub App has approved Repository `Administration: read & write` (default `true`). */
+  staffAppAdministration?: boolean;
   /** Whether polling the device-flow token endpoint faster than `interval` answers `slow_down` (default true). */
   strictPolling?: boolean;
   /** Sender domains Resend accepts; empty accepts all. */
