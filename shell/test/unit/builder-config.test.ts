@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { createBuilderConfig } from "../../scripts/builder-config.cjs";
 
@@ -38,8 +40,15 @@ describe("createBuilderConfig: one build per Deployment", () => {
     assert.equal(own.productName, "Reports");
   });
 
-  it("packs only the shell's own files", () => {
+  it("packs only the shell's own files and sets a valid Windows app icon", () => {
     const config = createBuilderConfig({ APP_URL: "https://reports.example.org" });
-    assert.deepEqual(config.files, ["package.json", "src/**/*.cjs"]);
+    assert.deepEqual(config.files, ["package.json", "src/**/*.cjs", "assets/icon.ico"]);
+    assert.equal(config.win?.icon, "assets/icon.ico");
+
+    const iconPath = resolve(import.meta.dirname, "..", "..", "assets", "icon.ico");
+    assert.ok(existsSync(iconPath), "assets/icon.ico must exist");
+    const header = readFileSync(iconPath).subarray(0, 4);
+    // ICO magic: 00 00 01 00
+    assert.deepEqual([...header], [0x00, 0x00, 0x01, 0x00]);
   });
 });
