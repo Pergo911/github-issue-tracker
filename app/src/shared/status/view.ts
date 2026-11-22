@@ -18,13 +18,15 @@ export type CloseReason = (typeof CLOSE_REASONS)[number];
 
 const isoTime = z.string().min(1);
 
+export const statusCommentItemSchema = z.strictObject({
+  kind: z.literal("comment"),
+  author: z.enum(["reporter", "staff"]),
+  text: z.string(),
+  at: isoTime,
+});
+
 const timelineItemSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("comment"),
-    author: z.enum(["reporter", "staff"]),
-    text: z.string(),
-    at: isoTime,
-  }),
+  statusCommentItemSchema,
   z.strictObject({ kind: z.literal("status"), id: z.string(), at: isoTime }),
   z.strictObject({ kind: z.literal("category"), id: z.string(), at: isoTime }),
   z.strictObject({ kind: z.literal("location"), id: z.string(), at: isoTime }),
@@ -64,6 +66,7 @@ export const statusViewSchema = z.strictObject({
 
 export type StatusView = z.infer<typeof statusViewSchema>;
 export type StatusTimelineItem = StatusView["timeline"][number];
+export type StatusCommentItem = z.infer<typeof statusCommentItemSchema>;
 export type StatusBody = StatusView["body"];
 
 export function closeReasonOf(reason: string | null | undefined): CloseReason {

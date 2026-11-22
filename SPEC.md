@@ -1223,6 +1223,15 @@ the fake was taught live's behaviour, or the code was changed with a test. What 
   `If-None-Match` (`304 Not Modified` costs 0 rate-limit quota) and **omits `Cache-Control` and `Pragma`**, so
   sending either request header from the SPA fails the browser CORS preflight. `githubFetch` therefore bypasses
   Chromium's disk cache with Fetch's `cache: "no-store"` option and handles `ETag` / `If-None-Match` in memory.
+  A follow-up probe on `Tarsashaz-demo/reports-sandbox` measured `POST /issues/:n/comments` (Staff and Bot) and
+  `PATCH /issues/:n` (label change) directly against live `api.github.com`: `GET /issues/:n/timeline`,
+  `GET /issues/:n`, and `GET /issues/comments` all reflected the write immediately (`t+0.0s`, returning `200` with
+  a new `ETag` both with and without `If-None-Match`), whereas `GET /issues?...` list pages lagged briefly on a
+  newly created issue (returning a stale `304` with `If-None-Match` and omitting the issue without it until ~6.6 s
+  after creation). To prevent stale conditional reads or double round-trips on writes, `githubFetch` clears its
+  in-memory ETag cache (with an epoch guard against earlier in-flight `GET`s) on any successful non-`GET` mutation,
+  and both commenting paths (Staff Detail and Reporter Status) patch the client query cache directly from the
+  created comment response without blocking on a refetch.
 - **Not settled.** Whether a Triage user may set labels in a PATCH (the fake's `triageCanLabel`, default true):
   the sandbox has no Triage account, so it remains the documented assumption until one exists.
 

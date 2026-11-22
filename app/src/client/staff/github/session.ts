@@ -53,11 +53,17 @@ export function createStaffSession(deps: StaffSessionDeps) {
   const base = deps.githubBase.replace(/\/+$/, "");
   let refreshing: Promise<void> | null = null;
   const etagCache = new Map<string, EtagEntry>();
+  let etagEpoch = 0;
   let cachedToken: string | null = store.read()?.accessToken ?? null;
+
+  function clearEtagCache(): void {
+    etagCache.clear();
+    etagEpoch += 1;
+  }
 
   function syncToken(nextToken: string | null): void {
     if (nextToken === cachedToken) return;
-    etagCache.clear();
+    clearEtagCache();
     cachedToken = nextToken;
   }
 
@@ -142,9 +148,11 @@ export function createStaffSession(deps: StaffSessionDeps) {
     const method = (init.method ?? "GET").toUpperCase();
     const callerProvidedIfNoneMatch = new Headers(init.headers).has("if-none-match");
     const cacheable = method === "GET" && !callerProvidedIfNoneMatch;
+    const isMutation = method !== "GET" && method !== "HEAD";
 
     return withToken(async (token) => {
       syncToken(token);
+      const epoch = etagEpoch;
       const cached = cacheable ? etagCache.get(url) : undefined;
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${token}`);
@@ -157,13 +165,16 @@ export function createStaffSession(deps: StaffSessionDeps) {
         await response.arrayBuffer();
         throw new Unauthorized();
       }
+      if (isMutation && response.ok) {
+        clearEtagCache();
+      }
       if (cacheable && response.status === 304 && cached) {
         const mergedHeaders = new Headers(cached.headers);
         const freshEtag = response.headers.get("etag");
         if (freshEtag !== null) mergedHeaders.set("etag", freshEtag);
         const freshLink = response.headers.get("link");
         if (freshLink !== null) mergedHeaders.set("link", freshLink);
-        if (cachedToken === token) {
+        if (cachedToken === token && etagEpoch === epoch) {
           setEtagEntry(url, {
             etag: freshEtag ?? cached.etag,
             body: cached.body,
@@ -180,14 +191,14 @@ export function createStaffSession(deps: StaffSessionDeps) {
         const etag = response.headers.get("etag");
         if (etag) {
           const body = await response.clone().text();
-          if (cachedToken === token) {
+          if (cachedToken === token && etagEpoch === epoch) {
             setEtagEntry(url, {
               etag,
               body,
               headers: [...response.headers.entries()],
             });
           }
-        } else if (cachedToken === token) {
+        } else if (cachedToken === token && etagEpoch === epoch) {
           etagCache.delete(url);
         }
       }
