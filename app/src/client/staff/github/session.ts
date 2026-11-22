@@ -34,6 +34,14 @@ export interface StaffSessionDeps {
 
 type Query = Record<string, string | number>;
 
+const MAX_ETAG_CACHE_ENTRIES = 200;
+
+interface EtagEntry {
+  etag: string;
+  body: string;
+  headers: [string, string][];
+}
+
 /**
  * The Staff member's session (SPEC 2.2, 2.6): the one place that adds the token to a call, refreshes it silently
  * when it is due or when GitHub (or the Worker) answers 401, retries once, and follows `Link` pagination. When
@@ -44,6 +52,34 @@ export function createStaffSession(deps: StaffSessionDeps) {
   const send: typeof fetch = (input, init) => (deps.fetch ?? fetch)(input, init);
   const base = deps.githubBase.replace(/\/+$/, "");
   let refreshing: Promise<void> | null = null;
+  const etagCache = new Map<string, EtagEntry>();
+  let etagEpoch = 0;
+  let cachedToken: string | null = store.read()?.accessToken ?? null;
+
+  function clearEtagCache(): void {
+    etagCache.clear();
+    etagEpoch += 1;
+  }
+
+  function syncToken(nextToken: string | null): void {
+    if (nextToken === cachedToken) return;
+    clearEtagCache();
+    cachedToken = nextToken;
+  }
+
+  store.subscribe(() => {
+    syncToken(store.read()?.accessToken ?? null);
+  });
+
+  function setEtagEntry(key: string, entry: EtagEntry): void {
+    if (etagCache.has(key)) {
+      etagCache.delete(key);
+    } else if (etagCache.size >= MAX_ETAG_CACHE_ENTRIES) {
+      const oldest = etagCache.keys().next().value;
+      if (oldest !== undefined) etagCache.delete(oldest);
+    }
+    etagCache.set(key, entry);
+  }
 
   /** One refresh at a time: a refresh token works once, so concurrent callers must share it. */
   function refresh(): Promise<void> {
@@ -109,15 +145,62 @@ export function createStaffSession(deps: StaffSessionDeps) {
 
   async function githubFetch(path: string, init: RequestInit = {}, query?: Query) {
     const url = urlOf(path, query);
+    const method = (init.method ?? "GET").toUpperCase();
+    const callerProvidedIfNoneMatch = new Headers(init.headers).has("if-none-match");
+    const cacheable = method === "GET" && !callerProvidedIfNoneMatch;
+    const isMutation = method !== "GET" && method !== "HEAD";
+
     return withToken(async (token) => {
+      syncToken(token);
+      const epoch = etagEpoch;
+      const cached = cacheable ? etagCache.get(url) : undefined;
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${token}`);
       headers.set("accept", GITHUB_ACCEPT);
       headers.set("x-github-api-version", GITHUB_API_VERSION);
-      const response = await send(url, { ...init, headers });
+      if (cached) headers.set("if-none-match", cached.etag);
+
+      const response = await send(url, { ...init, cache: "no-store", headers });
       if (response.status === 401) {
         await response.arrayBuffer();
         throw new Unauthorized();
+      }
+      if (isMutation && response.ok) {
+        clearEtagCache();
+      }
+      if (cacheable && response.status === 304 && cached) {
+        const mergedHeaders = new Headers(cached.headers);
+        const freshEtag = response.headers.get("etag");
+        if (freshEtag !== null) mergedHeaders.set("etag", freshEtag);
+        const freshLink = response.headers.get("link");
+        if (freshLink !== null) mergedHeaders.set("link", freshLink);
+        if (cachedToken === token && etagEpoch === epoch) {
+          setEtagEntry(url, {
+            etag: freshEtag ?? cached.etag,
+            body: cached.body,
+            headers: [...mergedHeaders.entries()],
+          });
+        }
+        return new Response(cached.body, {
+          status: 200,
+          statusText: "OK",
+          headers: mergedHeaders,
+        });
+      }
+      if (cacheable && response.status === 200) {
+        const etag = response.headers.get("etag");
+        if (etag) {
+          const body = await response.clone().text();
+          if (cachedToken === token && etagEpoch === epoch) {
+            setEtagEntry(url, {
+              etag,
+              body,
+              headers: [...response.headers.entries()],
+            });
+          }
+        } else if (cachedToken === token && etagEpoch === epoch) {
+          etagCache.delete(url);
+        }
       }
       return response;
     });

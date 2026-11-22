@@ -85,14 +85,19 @@ describe("repo GET and the permissions object", () => {
     const allowed = preflight.headers.get("access-control-allow-headers")?.toLowerCase() ?? "";
     expect(allowed).toContain("authorization");
     expect(allowed).toContain("x-github-api-version");
+    expect(allowed).toContain("if-none-match");
+    expect(allowed).not.toContain("cache-control");
+    expect(allowed).not.toContain("pragma");
   });
 
-  it("exposes Link to the browser on ordinary responses", async () => {
+  it("exposes ETag and Link to the browser on ordinary responses", async () => {
     const { world, client, org, repo } = await createTestWorld();
     const { token } = world.control.addStaff({ login: "someone", role: "read" });
     const reply = await client.github("GET", `/repos/${org}/${repo}`, { token });
     expect(reply.headers.get("access-control-allow-origin")).toBe("*");
-    expect(reply.headers.get("access-control-expose-headers")).toContain("Link");
+    const exposed = reply.headers.get("access-control-expose-headers") ?? "";
+    expect(exposed).toContain("Link");
+    expect(exposed).toContain("ETag");
   });
 });
 

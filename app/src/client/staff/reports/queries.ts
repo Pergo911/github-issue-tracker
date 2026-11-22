@@ -8,6 +8,7 @@ import type {
 import type { ExpectedBot } from "@shared/reports/attribution.ts";
 import { staffSession } from "../auth/session.ts";
 import { GitHubHttpError } from "../github/session.ts";
+import { mergeConfirmedComments } from "./confirmed-comments.ts";
 import { scanReporterComments } from "./reporter-comments.ts";
 
 interface Repo {
@@ -51,7 +52,7 @@ export const reportDetailQuery = (repo: Repo, number: number) =>
       ]);
       // The issues endpoints also answer for pull requests; a Report is never one.
       if (issue.pull_request) throw new GitHubHttpError(404, "Not Found");
-      return { issue, timeline };
+      return mergeConfirmedComments(repo, number, { issue, timeline });
     },
     refetchOnMount: "always",
     retry: false,

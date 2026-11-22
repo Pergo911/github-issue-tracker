@@ -18,6 +18,11 @@ import { Textarea } from "@/ui/input.tsx";
 import { LabelPill } from "@/ui/label-pill.tsx";
 import { ReportBody } from "@/ui/report-body.tsx";
 import { StatePill, type PillState } from "@/ui/state-pill.tsx";
+import {
+  appendStatusCommentToCache,
+  clearConfirmedStatusComments,
+  mergeConfirmedStatusComments,
+} from "./status-cache.ts";
 import { StatusTimeline } from "./status-timeline.tsx";
 
 /** The most a comment may hold after trimming (SPEC 4.3, 4.5). */
@@ -27,7 +32,8 @@ type Taxonomy = PublicConfig["taxonomy"];
 
 const statusQuery = (token: string) => ({
   queryKey: ["status", token],
-  queryFn: () => callApi(endpoints.statusLookup, { token }),
+  queryFn: async () =>
+    mergeConfirmedStatusComments(token, await callApi(endpoints.statusLookup, { token })),
   // The page is a read-only proxy of GitHub: a refresh loop must not spend the Bot's quota, and a limit or a
   // 404 is an answer, not a reason to ask again.
   retry: false,
@@ -71,10 +77,13 @@ function CommentBox({ token, closed }: { token: string; closed: boolean }) {
 
   const send = useMutation({
     mutationFn: (value: string) => callApi(endpoints.statusComment, { token, text: value }),
-    onSuccess: async () => {
+    onSuccess: ({ comment }) => {
       setText("");
       setSent(true);
-      await queryClient.invalidateQueries({ queryKey: ["status", token] });
+      const key = ["status", token];
+      void queryClient.cancelQueries({ queryKey: key });
+      appendStatusCommentToCache(queryClient, token, comment);
+      void queryClient.invalidateQueries({ queryKey: key });
     },
   });
 
@@ -301,6 +310,7 @@ function Report({ view, token }: { view: StatusView; token: string }) {
       <ReissueSection
         token={token}
         onDone={() => {
+          clearConfirmedStatusComments(token);
           queryClient.removeQueries({ queryKey: ["status", token] });
           setReissued(true);
         }}

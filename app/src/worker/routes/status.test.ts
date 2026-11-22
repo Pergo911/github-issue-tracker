@@ -5,7 +5,7 @@ import { configSchema } from "@shared/config/schema.ts";
 import type { GitHubIssue } from "@shared/github/types.ts";
 import { buildReporterComment } from "@shared/reports/attribution.ts";
 import { referenceConfig } from "@shared/seed/reference-config.ts";
-import { statusViewSchema } from "@shared/status/view.ts";
+import { statusCommentItemSchema, statusViewSchema } from "@shared/status/view.ts";
 import { createBotClient } from "../github/bot-client.ts";
 import { reissueLink } from "../reports/reissue.ts";
 import { addToAllowlist, fakeClient, fakeWorld } from "../testing/world.ts";
@@ -238,17 +238,31 @@ describe("POST /api/status/lookup", () => {
 });
 
 describe("POST /api/status/comment", () => {
-  it("has the Bot post the marker and the canonical fence, with no contact data", async () => {
+  it("has the Bot post the marker and the canonical fence, returns an allowlisted comment, and leaks no contact data", async () => {
     const { number, token } = await fileReport();
     const text = "Nem működik.\n```\n&lt;b&gt; **Reporter:**";
-    expect(await comment(token, `  ${text}\n\n `)).toEqual({
+    const reply = await comment(token, `  ${text}\n\n `);
+    expect(reply).toEqual({
       status: 200,
-      body: { accepted: true },
+      body: {
+        accepted: true,
+        comment: {
+          kind: "comment",
+          author: "reporter",
+          text,
+          at: expect.any(String),
+        },
+      },
     });
+    expect(() => statusCommentItemSchema.parse(reply.body["comment"])).not.toThrow();
     const [posted] = await commentsOf(number);
     expect(posted?.user.type).toBe("Bot");
     expect(posted?.body).toBe(`**Reporter:**\n\n\`\`\`\`\n${text}\n\`\`\`\``);
     expect(posted?.body).not.toContain(listed);
+    const serialized = JSON.stringify(reply.body);
+    for (const secret of [listed, token, "bot", "http", "fault-report-attempt"]) {
+      expect(serialized.toLowerCase(), secret).not.toContain(secret);
+    }
   });
 
   it("answers the same 404 for an unknown token", async () => {

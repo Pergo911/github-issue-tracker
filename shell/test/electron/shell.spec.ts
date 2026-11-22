@@ -3,6 +3,31 @@ import type { AddressInfo } from "node:net";
 import { expect, test, type ElectronApplication } from "@playwright/test";
 import { appUrl, launchShell, stubOpenExternal } from "./support.ts";
 
+async function clickMenuItem(application: ElectronApplication, id: string) {
+  await application.evaluate(({ BrowserWindow, Menu }, itemId) => {
+    const menu = Menu.getApplicationMenu();
+    const item = menu?.getMenuItemById(itemId);
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!item || !win) throw new Error(`Missing menu item ${itemId} or window`);
+    item.click({}, win, win.webContents);
+  }, id);
+}
+
+async function readNavMenuState(application: ElectronApplication) {
+  return application.evaluate(({ Menu }) => {
+    const menu = Menu.getApplicationMenu();
+    if (!menu) return null;
+    return {
+      topLevelLabels: menu.items.map((item) => item.label),
+      backEnabled: menu.getMenuItemById("nav-back")?.enabled ?? null,
+      forwardEnabled: menu.getMenuItemById("nav-forward")?.enabled ?? null,
+      homeEnabled: menu.getMenuItemById("nav-home")?.enabled ?? null,
+      reloadEnabled: menu.getMenuItemById("nav-reload")?.enabled ?? null,
+      forceReloadEnabled: menu.getMenuItemById("nav-force-reload")?.enabled ?? null,
+    };
+  });
+}
+
 let app: ElectronApplication;
 test.afterEach(async () => {
   await app?.close();
@@ -159,4 +184,200 @@ test("an unreachable site shows a plain error page, not a blank window", async (
   app = launched.app;
   await expect(launched.window.getByRole("heading", { level: 1 })).toContainText("Nem érhető el");
   await expect(launched.window.getByRole("link", { name: /Try again/ })).toBeVisible();
+});
+
+test("application menu exposes Navigation, Edit, and View items with Back/Forward disabled on start", async () => {
+  const launched = await launchShell();
+  app = launched.app;
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await expect
+    .poll(() => readNavMenuState(app))
+    .toEqual({
+      topLevelLabels: ["Navigation", "Edit", "View"],
+      backEnabled: false,
+      forwardEnabled: false,
+      homeEnabled: true,
+      reloadEnabled: true,
+      forceReloadEnabled: true,
+    });
+});
+
+test("Back, Forward, and Home navigate across SPA client-side routes in the same window", async () => {
+  const launched = await launchShell();
+  app = launched.app;
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await launched.window
+    .getByRole("link", { name: /staff|munkatárs|karbantart/i })
+    .first()
+    .click();
+  await expect(launched.window).toHaveURL(`${appUrl()}/staff/reports`);
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await expect.poll(async () => (await readNavMenuState(app))?.backEnabled).toBe(true);
+  await expect.poll(async () => (await readNavMenuState(app))?.forwardEnabled).toBe(false);
+
+  await clickMenuItem(app, "nav-back");
+  await expect(launched.window).toHaveURL(`${appUrl()}/`);
+  await expect.poll(async () => (await readNavMenuState(app))?.backEnabled).toBe(false);
+  await expect.poll(async () => (await readNavMenuState(app))?.forwardEnabled).toBe(true);
+
+  await clickMenuItem(app, "nav-forward");
+  await expect(launched.window).toHaveURL(`${appUrl()}/staff/reports`);
+  await expect.poll(async () => (await readNavMenuState(app))?.backEnabled).toBe(true);
+  await expect.poll(async () => (await readNavMenuState(app))?.forwardEnabled).toBe(false);
+
+  await clickMenuItem(app, "nav-home");
+  await expect(launched.window).toHaveURL(`${appUrl()}/`);
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+  expect(app.windows()).toHaveLength(1);
+});
+
+test("Reload menu item and F5 reload the current page", async () => {
+  const launched = await launchShell();
+  app = launched.app;
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await launched.window
+    .getByRole("link", { name: /staff|munkatárs|karbantart/i })
+    .first()
+    .click();
+  await expect(launched.window).toHaveURL(`${appUrl()}/staff/reports`);
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await launched.window.evaluate(() => {
+    (globalThis as { __reloadMarker?: boolean }).__reloadMarker = true;
+  });
+  await Promise.all([launched.window.waitForEvent("load"), clickMenuItem(app, "nav-reload")]);
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+  expect(
+    await launched.window.evaluate(
+      () => (globalThis as { __reloadMarker?: boolean }).__reloadMarker,
+    ),
+  ).toBeUndefined();
+  expect(launched.window.url()).toBe(`${appUrl()}/staff/reports`);
+
+  await launched.window.evaluate(() => {
+    (globalThis as { __reloadMarker?: boolean }).__reloadMarker = true;
+  });
+  // Playwright's CDP keyboard.press bypasses Electron's PreHandleKeyboardEvent/before-input-event;
+  // webContents.sendInputEvent routes through the same native input path a real user key press takes.
+  await Promise.all([
+    launched.window.waitForEvent("load"),
+    app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (!win) throw new Error("missing window");
+      win.focus();
+      win.webContents.sendInputEvent({ type: "keyDown", keyCode: "F5" });
+      win.webContents.sendInputEvent({ type: "keyUp", keyCode: "F5" });
+    }),
+  ]);
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+  expect(
+    await launched.window.evaluate(
+      () => (globalThis as { __reloadMarker?: boolean }).__reloadMarker,
+    ),
+  ).toBeUndefined();
+  expect(launched.window.url()).toBe(`${appUrl()}/staff/reports`);
+});
+
+test("mouse app-command browser-backward and browser-forward navigate history", async () => {
+  const launched = await launchShell();
+  app = launched.app;
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await launched.window
+    .getByRole("link", { name: /staff|munkatárs|karbantart/i })
+    .first()
+    .click();
+  await expect(launched.window).toHaveURL(`${appUrl()}/staff/reports`);
+
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    win?.emit("app-command", {} as Electron.Event, "browser-backward");
+  });
+  await expect(launched.window).toHaveURL(`${appUrl()}/`);
+
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    win?.emit("app-command", {} as Electron.Event, "browser-forward");
+  });
+  await expect(launched.window).toHaveURL(`${appUrl()}/staff/reports`);
+  expect(app.windows()).toHaveLength(1);
+});
+
+test("right-click context menu offers Back, Forward, Reload and edit controls when editable", async () => {
+  const launched = await launchShell();
+  app = launched.app;
+  await expect(launched.window.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await launched.window
+    .getByRole("link", { name: /staff|munkatárs|karbantart/i })
+    .first()
+    .click();
+  await expect(launched.window).toHaveURL(`${appUrl()}/staff/reports`);
+
+  const captured = await app.evaluate(({ BrowserWindow, Menu }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) throw new Error("missing window");
+    const menus: Array<Array<{ id: string; role: string | null; type: string; enabled: boolean }>> =
+      [];
+    const originalPopup = Menu.prototype.popup;
+    Menu.prototype.popup = function () {
+      menus.push(
+        this.items.map((item) => ({
+          id: item.id,
+          role: item.role ?? null,
+          type: item.type,
+          enabled: item.enabled,
+        })),
+      );
+    };
+    try {
+      win.webContents.emit(
+        "context-menu",
+        {} as Electron.Event,
+        {
+          x: 10,
+          y: 10,
+          isEditable: false,
+          selectionText: "",
+          editFlags: { canCut: false, canCopy: false, canPaste: false, canSelectAll: false },
+        } as Electron.ContextMenuParams,
+      );
+      win.webContents.emit(
+        "context-menu",
+        {} as Electron.Event,
+        {
+          x: 10,
+          y: 10,
+          isEditable: true,
+          selectionText: "abc",
+          editFlags: { canCut: true, canCopy: true, canPaste: true, canSelectAll: true },
+        } as Electron.ContextMenuParams,
+      );
+    } finally {
+      Menu.prototype.popup = originalPopup;
+    }
+    return menus;
+  });
+
+  expect(captured).toHaveLength(2);
+  expect(captured[0]).toEqual([
+    { id: "context-back", role: null, type: "normal", enabled: true },
+    { id: "context-forward", role: null, type: "normal", enabled: false },
+    { id: "context-reload", role: null, type: "normal", enabled: true },
+  ]);
+  expect(captured[1]?.map((item) => item.id || item.role || item.type)).toEqual([
+    "context-back",
+    "context-forward",
+    "context-reload",
+    "separator",
+    "cut",
+    "copy",
+    "paste",
+    "selectall",
+  ]);
+  expect(app.windows()).toHaveLength(1);
 });

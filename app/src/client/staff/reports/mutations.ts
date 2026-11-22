@@ -1,5 +1,5 @@
 import type { Dimension } from "@shared/config/schema.ts";
-import type { GitHubIssue } from "@shared/github/types.ts";
+import type { GitHubComment, GitHubIssue } from "@shared/github/types.ts";
 import { dropStatus, setDimension } from "@shared/reports/labels.ts";
 import type { CloseReason } from "@shared/status/view.ts";
 import { GitHubHttpError, type StaffSession } from "../github/session.ts";
@@ -54,14 +54,19 @@ export function createReportWrites(session: Pick<StaffSession, "githubFetch">) {
     return (await response.json()) as GitHubIssue;
   }
 
-  async function patch(repo: Repo, number: number, body: Record<string, unknown>) {
-    await expectOk(
+  async function patch(
+    repo: Repo,
+    number: number,
+    body: Record<string, unknown>,
+  ): Promise<GitHubIssue> {
+    const response = await expectOk(
       await session.githubFetch(issuePath(repo, number), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       }),
     );
+    return (await response.json()) as GitHubIssue;
   }
 
   /** Reads the labels as GitHub has them now and sends `change` of them in one PATCH, with `extra` fields. */
@@ -70,9 +75,9 @@ export function createReportWrites(session: Pick<StaffSession, "githubFetch">) {
     number: number,
     change: (labels: string[]) => string[],
     extra: Record<string, unknown> = {},
-  ) {
+  ): Promise<GitHubIssue> {
     const fresh = await read(repo, number);
-    await patch(repo, number, {
+    return patch(repo, number, {
       ...extra,
       labels: change(fresh.labels.map((label) => label.name)),
     });
@@ -84,7 +89,7 @@ export function createReportWrites(session: Pick<StaffSession, "githubFetch">) {
       relabel(repo, number, (labels) => setDimension(labels, dimension, id)),
 
     /** One PATCH: the state, the reason and the dropped Status label. */
-    async close(repo: Repo, number: number, choice: CloseChoice) {
+    async close(repo: Repo, number: number, choice: CloseChoice): Promise<GitHubIssue> {
       let extra: Record<string, unknown>;
       if (choice.reason === "duplicate") {
         if (choice.duplicateOf === number) throw new DuplicateOriginalError();
@@ -103,7 +108,7 @@ export function createReportWrites(session: Pick<StaffSession, "githubFetch">) {
       } else {
         extra = { state: "closed", state_reason: STATE_REASON[choice.reason] };
       }
-      await relabel(repo, number, dropStatus, extra);
+      return relabel(repo, number, dropStatus, extra);
     },
 
     /** One PATCH: the state and the Initial status. */
@@ -117,14 +122,15 @@ export function createReportWrites(session: Pick<StaffSession, "githubFetch">) {
       patch(repo, number, { assignees: login === null ? [] : [login] }),
 
     /** A comment as the signed-in member. */
-    async comment(repo: Repo, number: number, text: string) {
-      await expectOk(
+    async comment(repo: Repo, number: number, text: string): Promise<GitHubComment> {
+      const response = await expectOk(
         await session.githubFetch(`${issuePath(repo, number)}/comments`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ body: text }),
         }),
       );
+      return (await response.json()) as GitHubComment;
     },
   };
 }

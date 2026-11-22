@@ -1,11 +1,16 @@
 import type { Hono } from "hono";
 import { endpoints } from "@shared/api/endpoints.ts";
 import { buildReporterComment } from "@shared/reports/attribution.ts";
-import type { GitHubIssue, GitHubTimelineEvent } from "@shared/github/types.ts";
-import { buildStatusView, type StatusView } from "@shared/status/view.ts";
+import type { GitHubComment, GitHubIssue, GitHubTimelineEvent } from "@shared/github/types.ts";
+import { buildStatusView, type StatusCommentItem, type StatusView } from "@shared/status/view.ts";
 import { registerEndpoint } from "../api/register.ts";
 import { loadConfig } from "../config/load.ts";
-import { GitHubApiError, GitHubNetworkError, createBotClient } from "../github/bot-client.ts";
+import {
+  GitHubApiError,
+  GitHubNetworkError,
+  createBotClient,
+  type GitHubResponse,
+} from "../github/bot-client.ts";
 import { resolveBotIdentity } from "../github/bot-identity.ts";
 import { reissueLink } from "../reports/reissue.ts";
 import { cacheView, evictView, readCachedView } from "../status/cache.ts";
@@ -96,18 +101,29 @@ export function registerStatus(app: Hono<{ Bindings: Env }>): void {
     if (!(await env.REPORT_GATE.getByName(String(number)).take("comment"))) {
       return fail("rate_limited");
     }
+    let created: GitHubResponse<GitHubComment>;
     try {
       const bot = createBotClient(env);
-      await bot.request("POST", bot.repoPath(`/issues/${number}/comments`), {
-        body: { body: buildReporterComment(text) },
-      });
+      created = await bot.request<GitHubComment>(
+        "POST",
+        bot.repoPath(`/issues/${number}/comments`),
+        {
+          body: { body: buildReporterComment(text) },
+        },
+      );
     } catch (error) {
       const code = upstream(error);
       if (code === null) throw error;
       return fail(code);
     }
     await evictView(input.token);
-    return { accepted: true } as const;
+    const comment: StatusCommentItem = {
+      kind: "comment",
+      author: "reporter",
+      text,
+      at: created.data.created_at,
+    };
+    return { accepted: true, comment } as const;
   });
 
   registerEndpoint(app, endpoints.statusReissue, async ({ env, input, request, fail }) => {

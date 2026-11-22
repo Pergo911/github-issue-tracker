@@ -118,6 +118,7 @@ export const hu = {
   "board.card.menu": "{title} állapota",
   "board.card.roleDescription": "Áthelyezhető bejelentés",
   "board.card.choose": "Válasszon állapotot",
+  "board.card.saving": "Mentés…",
   "board.drag.instructions":
     "A szóköz vagy az Enter felveszi a bejelentést, a nyílbillentyűk másik oszlopba viszik, a szóköz vagy az Enter leteszi. Az Esc megszakítja.",
   "board.drag.start": "Felvette: {title}.",
@@ -201,6 +202,7 @@ export const hu = {
   "detail.sidebar.priority": "Prioritás",
   "detail.sidebar.assignee": "Felelős",
   "detail.sidebar.reporter": "Bejelentő",
+  "detail.sidebar.saving": "Mentés…",
   "detail.picker.unset": "Nincs megadva",
   "detail.picker.unassigned": "Senki",
   "detail.picker.loading": "Betöltés…",

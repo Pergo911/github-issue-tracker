@@ -11,6 +11,9 @@ What it does, and nothing more:
   a second window: Status links and the GitHub device-flow page open there;
 - keeps Electron's secure defaults (context isolation, sandbox, no Node integration, **no preload script**) and
   denies every permission request;
+- provides an application menu bar (Navigation: Back, Forward, Home, Reload, Force Reload; Edit; View, with
+  DevTools only in unpackaged runs), `F5`/`Ctrl+F5`/`Shift+F5` refresh keys, mouse Back/Forward
+  (`app-command`), and a right-click context menu;
 - shows a plain error page, not a blank window, when the site cannot be reached.
 
 A packaged build accepts **HTTPS only**. An unpackaged `npm start` also accepts `http://localhost`,
@@ -56,12 +59,12 @@ The configuration is `electron-builder.config.cjs` (logic in `scripts/builder-co
 
 ## Checks
 
-| Command                  | What it checks                                                                                                                                                                           |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run verify`         | typecheck, Prettier, unit tests and the Electron-driver tests (about a minute)                                                                                                           |
-| `npm run test:unit`      | the URL rule, the navigation policy, the secure web preferences, the builder config                                                                                                      |
-| `npm run test:e2e`       | Playwright's Electron driver against the real SPA: home page, secure preferences, `target="_blank"` and `window.open` to the system browser, off-origin navigation and redirects blocked |
-| `npm run test:installer` | **slow, Windows only.** Builds, installs silently into a temp folder, launches the installed app, screenshots it, uninstalls. `verify -- --installer` runs it too.                       |
+| Command                  | What it checks                                                                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run verify`         | typecheck, Prettier, unit tests and the Electron-driver tests (about a minute)                                                                                                                        |
+| `npm run test:unit`      | the URL rule, the navigation policy, the menu and shortcut builders, the secure web preferences, the builder config                                                                                   |
+| `npm run test:e2e`       | Playwright's Electron driver against the real SPA: home page, application menu, Back/Forward/Home/Reload, `app-command`, context menu, secure preferences, external links, off-origin blocks          |
+| `npm run test:installer` | **slow, Windows only.** Builds, installs silently into a temp folder, launches the installed app, verifies packaged menu and navigation, screenshots it, uninstalls. `verify -- --installer` runs it. |
 
 `test:e2e` needs `app/` installed (`npm ci` in `app/`): it starts that package's dev server, seeded, on a free
 port and in a private state directory, and stops it afterwards. Nothing uses a fixed port.

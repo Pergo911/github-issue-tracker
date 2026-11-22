@@ -215,3 +215,138 @@ test("the Reporter-comment filter and sort are right, and a refresh picks up a n
   await expect(rows.first()).toContainText(`${run}-first`, SLOW);
   await expect(rows.first()).toContainText(hu["reports.reporter.mark"].replace("{count}", "2"));
 });
+
+test("a moved card does not snap back on refetch or refresh even with 60s Cache-Control headers", async ({
+  page,
+  world,
+}) => {
+  const title = tag();
+  const { number } = await ownReport(world, title, [...KEPT, "status:new"]);
+  const listResponses: { status: number; cacheControl: string | null }[] = [];
+  page.on("response", (response) => {
+    const pathname = new URL(response.url()).pathname;
+    if (response.request().method() === "GET" && pathname.endsWith("/issues")) {
+      listResponses.push({
+        status: response.status(),
+        cacheControl: response.headers()["cache-control"] ?? null,
+      });
+    }
+  });
+
+  await openBoard(page, "maintenance", title);
+  await expect(inColumn(page, "new", number)).toBeVisible(SLOW);
+  await expect.poll(() => listResponses.length, SLOW).toBeGreaterThanOrEqual(1);
+  expect(listResponses[0]?.cacheControl).toBe("private, max-age=60, s-maxage=60");
+
+  const beforeCount = listResponses.length;
+  await card(page, title).getByRole("combobox").click();
+  await page.getByRole("listbox").getByRole("option", { name: "Folyamatban" }).click();
+  await expect(inColumn(page, "in-progress", number)).toBeVisible(SLOW);
+  // Wait for the post-mutation invalidation refetch to complete from fake GitHub.
+  await expect.poll(() => listResponses.length, SLOW).toBeGreaterThan(beforeCount);
+  await expect(inColumn(page, "in-progress", number)).toBeVisible();
+  await expect(inColumn(page, "new", number)).toHaveCount(0);
+
+  // Manual Refresh within the 60s max-age window must still keep the updated column.
+  const beforeRefresh = listResponses.length;
+  await page.getByRole("button", { name: hu["reports.refresh"] }).click();
+  await expect.poll(() => listResponses.length, SLOW).toBeGreaterThan(beforeRefresh);
+  await expect(inColumn(page, "in-progress", number)).toBeVisible();
+  await expect(inColumn(page, "new", number)).toHaveCount(0);
+});
+
+test("pending UX locks only the mutating card and concurrent moves on another card do not snap back", async ({
+  page,
+  world,
+}) => {
+  const run = tag();
+  const owner = `own-${run}`;
+  await staffToken(owner, "viewer");
+  const cardA = await world.createReport({
+    title: `${run}-A`,
+    labels: [...KEPT, "status:new"],
+    assignees: [owner],
+  });
+  const cardB = await world.createReport({
+    title: `${run}-B`,
+    labels: [...KEPT, "status:new"],
+    assignees: [owner],
+  });
+
+  let patchAStarted = false;
+  let patchBStarted = false;
+  let releaseA!: () => void;
+  let releaseB!: () => void;
+  const gateA = new Promise<void>((resolve) => {
+    releaseA = resolve;
+  });
+  const gateB = new Promise<void>((resolve) => {
+    releaseB = resolve;
+  });
+
+  await page.route(new RegExp(`/issues/${cardA.number}$`), async (route) => {
+    if (route.request().method() === "PATCH") {
+      patchAStarted = true;
+      await gateA;
+    }
+    return route.fallback();
+  });
+  await page.route(new RegExp(`/issues/${cardB.number}$`), async (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBStarted = true;
+      await gateB;
+    }
+    return route.fallback();
+  });
+
+  try {
+    await openBoard(page, "maintenance", run);
+    await expect(inColumn(page, "new", cardA.number)).toBeVisible(SLOW);
+    await expect(inColumn(page, "new", cardB.number)).toBeVisible(SLOW);
+
+    // Move Card A and hold its PATCH in flight.
+    await card(page, `${run}-A`).getByRole("combobox").click();
+    await page.getByRole("listbox").getByRole("option", { name: "Folyamatban" }).click();
+    await expect.poll(() => patchAStarted, SLOW).toBe(true);
+
+    const pendingCardA = inColumn(page, "in-progress", cardA.number);
+    await expect(pendingCardA).toBeVisible(SLOW);
+    await expect(pendingCardA).toHaveAttribute("aria-busy", "true");
+    await expect(pendingCardA.locator("[data-grip]")).toBeDisabled();
+    await expect(pendingCardA.getByRole("combobox")).toBeDisabled();
+    await expect(pendingCardA.locator("[data-card-saving]")).toContainText(hu["board.card.saving"]);
+
+    // Card B remains completely interactive while Card A saves.
+    const readyCardB = inColumn(page, "new", cardB.number);
+    await expect(readyCardB).not.toHaveAttribute("aria-busy", "true");
+    await expect(readyCardB.locator("[data-grip]")).toBeEnabled();
+    await expect(readyCardB.getByRole("combobox")).toBeEnabled();
+
+    // Move Card B while Card A is still in flight.
+    await readyCardB.getByRole("combobox").click();
+    await page.getByRole("listbox").getByRole("option", { name: "Várakozik" }).click();
+    await expect.poll(() => patchBStarted, SLOW).toBe(true);
+    const pendingCardB = inColumn(page, "on-hold", cardB.number);
+    await expect(pendingCardB).toBeVisible(SLOW);
+    await expect(pendingCardB).toHaveAttribute("aria-busy", "true");
+
+    // Finish Card A while Card B is still in flight: Card B must NOT snap back to "new".
+    releaseA();
+    await expect(pendingCardA).not.toHaveAttribute("aria-busy", "true", SLOW);
+    await expect(pendingCardA).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(pendingCardB).toBeVisible();
+    await expect(pendingCardB).toHaveAttribute("aria-busy", "true");
+    await expect(inColumn(page, "new", cardB.number)).toHaveCount(0);
+
+    // Finish Card B and verify both persist after settlement and manual refresh.
+    releaseB();
+    await expect(pendingCardB).not.toHaveAttribute("aria-busy", "true", SLOW);
+    await page.getByRole("button", { name: hu["reports.refresh"] }).click();
+    await expect(inColumn(page, "in-progress", cardA.number)).toBeVisible(SLOW);
+    await expect(inColumn(page, "on-hold", cardB.number)).toBeVisible(SLOW);
+  } finally {
+    releaseA();
+    releaseB();
+  }
+});

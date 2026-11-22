@@ -1,5 +1,9 @@
 import { expect, type Page } from "@playwright/test";
-import type { StatusTimelineItem, StatusView } from "../src/shared/status/view.ts";
+import type {
+  StatusCommentItem,
+  StatusTimelineItem,
+  StatusView,
+} from "../src/shared/status/view.ts";
 import { referenceConfig } from "../src/shared/seed/reference-config.ts";
 import type { Screen } from "./screens.ts";
 import type { AllowedText } from "./support/pseudo-sweep.ts";
@@ -101,11 +105,25 @@ const submitComment = (page: Page) => page.locator("form button[type=submit]");
 const reissueButton = (page: Page) => page.locator("#reissue-heading ~ div button");
 const confirmReissue = (page: Page) => page.getByRole("dialog").getByRole("button").last();
 
-function fakeComment(page: Page, answer: { status: number; code?: string }) {
+function fakeComment(
+  page: Page,
+  answer: { status: number; code?: string; comment?: StatusCommentItem },
+) {
   return page.route(commentUrl, (route) =>
     answer.code
       ? route.fulfill({ status: answer.status, json: { error: { code: answer.code } } })
-      : route.fulfill({ status: 200, json: { accepted: true } }),
+      : route.fulfill({
+          status: 200,
+          json: {
+            accepted: true,
+            comment: answer.comment ?? {
+              kind: "comment",
+              author: "reporter",
+              text: typed.reply,
+              at: at(5, 15, 0),
+            },
+          },
+        }),
   );
 }
 
@@ -253,9 +271,11 @@ export const statusScreens: Screen[] = [
     ready: async (page) => {
       await headingShown(page);
       await openCommentBox(page).fill(typed.reply);
+      const refreshed = page.waitForResponse(lookupUrl);
       await submitComment(page).click();
       await expect(page.getByRole("status")).toBeVisible();
       await expect(page.getByText(typed.reply)).toBeVisible();
+      await refreshed;
     },
     allowText: statusData,
   },

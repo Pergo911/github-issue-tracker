@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { roleAtLeast } from "@shared/github/roles.ts";
 import { usePublicConfig } from "@/config/context.tsx";
@@ -12,6 +12,7 @@ import { staffSession } from "../auth/session.ts";
 import { useStaff } from "../auth/staff-context.tsx";
 import { Board } from "./board.tsx";
 import { moveOptimistically } from "./board-model.ts";
+import { patchIssueInCaches } from "./cache.ts";
 import { FilterBar } from "./filter-bar.tsx";
 import { filterReports, sortByLastReporterComment, sortReports, toReportRow } from "./model.ts";
 import { createReportWrites } from "./mutations.ts";
@@ -57,6 +58,9 @@ export function Component() {
   const queryClient = useQueryClient();
   const canMove = roleAtLeast(role, "maintenance");
   const [rolledBack, setRolledBack] = useState<number | null>(null);
+  const [pendingCounts, setPendingCounts] = useState<ReadonlyMap<number, number>>(() => new Map());
+  const pendingCards = useMemo(() => new Set(pendingCounts.keys()), [pendingCounts]);
+  const inFlightMovesRef = useRef(0);
   const [params, setParams] = useSearchParams();
   const view = useMemo(() => parseListView(params), [params]);
   useDocumentTitle(t("reports.title"), displayName);
@@ -98,12 +102,26 @@ export function Component() {
   // The age of a Report is counted from when the list was fetched, so a re-render never changes it.
   const now = active.dataUpdatedAt;
 
+  function adjustPending(number: number, delta: 1 | -1) {
+    setPendingCounts((prev) => {
+      const next = new Map(prev);
+      const count = (next.get(number) ?? 0) + delta;
+      if (count > 0) next.set(number, count);
+      else next.delete(number);
+      return next;
+    });
+  }
+
   // A drop and a menu choice are the same write: a fresh GET, then one PATCH of this Report's Status. The card
-  // moves at once; on a failure only that card goes back, with a notice.
+  // moves at once; on a failure only that card goes back, with a notice. Only the final concurrent move triggers
+  // invalidation so an earlier completion never snaps another in-flight card back.
   const move = useMutation({
+    mutationKey: ["staff", "reports", "move", repo.owner, repo.name],
     mutationFn: ({ number, status }: { number: number; status: string }) =>
       writes.setDimension(repo, number, "status", status),
     onMutate: async ({ number, status }) => {
+      inFlightMovesRef.current += 1;
+      adjustPending(number, 1);
       setRolledBack(null);
       const key = reportsQuery(repo).queryKey;
       await queryClient.cancelQueries({ queryKey: key });
@@ -112,6 +130,9 @@ export function Component() {
         issues ? moveOptimistically(issues, number, status) : issues,
       );
       return { key, before };
+    },
+    onSuccess: (updated) => {
+      patchIssueInCaches(queryClient, repo, updated);
     },
     onError: (_error, { number }, context) => {
       const { key, before } = context ?? {};
@@ -122,7 +143,14 @@ export function Component() {
       }
       setRolledBack(number);
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["staff", "reports"] }),
+    onSettled: (_data, _error, { number }) => {
+      adjustPending(number, -1);
+      inFlightMovesRef.current = Math.max(0, inFlightMovesRef.current - 1);
+      if (inFlightMovesRef.current === 0) {
+        return queryClient.invalidateQueries({ queryKey: ["staff", "reports"] });
+      }
+      return undefined;
+    },
   });
 
   const refresh = () => {
@@ -171,7 +199,10 @@ export function Component() {
           now={now}
           scan={scan}
           canMove={canMove}
-          onMove={(number, status) => move.mutate({ number, status })}
+          pendingCards={pendingCards}
+          onMove={(number, status) => {
+            if (!pendingCards.has(number)) move.mutate({ number, status });
+          }}
         />
       </div>
     );

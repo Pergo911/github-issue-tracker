@@ -21,17 +21,38 @@ type Repo = { owner: string; name: string };
 export function SidebarSection({
   title,
   id,
+  saving = false,
   children,
 }: {
   title: string;
   id?: string;
+  saving?: boolean;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
-    <div className="flex flex-col gap-2 border-b border-border-subtle pb-4 last:border-b-0">
-      <h2 id={id} className="text-xs font-semibold text-muted-foreground">
-        {title}
-      </h2>
+    <div
+      aria-busy={saving || undefined}
+      className="flex flex-col gap-2 border-b border-border-subtle pb-4 last:border-b-0"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 id={id} className="text-xs font-semibold text-muted-foreground">
+          {title}
+        </h2>
+        {saving ? (
+          <span
+            role="status"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            data-sidebar-saving=""
+          >
+            <span
+              aria-hidden="true"
+              className="size-3 animate-spin rounded-full border-2 border-border border-t-link motion-reduce:animate-none"
+            />
+            {t("detail.sidebar.saving")}
+          </span>
+        ) : null}
+      </div>
       <div className="flex flex-wrap gap-2 text-sm">{children}</div>
     </div>
   );
@@ -70,6 +91,7 @@ export function DimensionSection({
   taxonomy,
   editable,
   busy,
+  saving = false,
   onChange,
 }: {
   detail: ReportDetail;
@@ -77,6 +99,7 @@ export function DimensionSection({
   taxonomy: Taxonomy;
   editable: boolean;
   busy: boolean;
+  saving?: boolean;
   onChange: (id: string) => void;
 }) {
   const t = useT();
@@ -91,7 +114,7 @@ export function DimensionSection({
     );
   }
   return (
-    <SidebarSection title={title} id={headingId}>
+    <SidebarSection title={title} id={headingId} saving={saving}>
       {editable ? (
         <div className="w-full">
           <Picker
@@ -121,12 +144,14 @@ export function AssigneeSection({
   repo,
   editable,
   busy,
+  saving = false,
   onChange,
 }: {
   detail: ReportDetail;
   repo: Repo;
   editable: boolean;
   busy: boolean;
+  saving?: boolean;
   onChange: (login: string | null) => void;
 }) {
   const t = useT();
@@ -149,7 +174,7 @@ export function AssigneeSection({
     ...new Set([...(members.data ?? []).map((user) => user.login), ...detail.row.assignees]),
   ];
   return (
-    <SidebarSection title={title} id={headingId}>
+    <SidebarSection title={title} id={headingId} saving={saving}>
       <div className="w-full">
         <Picker
           labelledBy={headingId}
