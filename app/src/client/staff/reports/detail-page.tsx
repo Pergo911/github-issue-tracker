@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftIcon } from "@primer/octicons-react";
+import { ArrowLeftIcon, SyncIcon } from "@primer/octicons-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import type { Dimension } from "@shared/config/schema.ts";
+import type { GitHubIssue } from "@shared/github/types.ts";
 import { roleAtLeast } from "@shared/github/roles.ts";
 import { useFormatter, usePublicConfig } from "@/config/context.tsx";
 import { useT } from "@/i18n/context.tsx";
@@ -18,11 +19,16 @@ import { StatusTimeline } from "../../reporter/status-timeline.tsx";
 import { staffSession } from "../auth/session.ts";
 import { useStaff } from "../auth/staff-context.tsx";
 import { GitHubHttpError } from "../github/session.ts";
+import {
+  patchIssueInCaches,
+  setAssigneeOptimistically,
+  setDimensionOptimistically,
+} from "./cache.ts";
 import { CloseDialog } from "./close-dialog.tsx";
 import { toReportDetail, type ReportDetail } from "./detail-model.ts";
 import { AssigneeSection, ContactSection, DimensionSection } from "./detail-sidebar.tsx";
 import { DuplicateOriginalError, createReportWrites, type CloseChoice } from "./mutations.ts";
-import { reportDetailQuery } from "./queries.ts";
+import { assignableQuery, reportDetailQuery, reportsQuery } from "./queries.ts";
 
 /** The most a comment may hold after trimming. */
 const COMMENT_MAX = 2000;
@@ -53,7 +59,7 @@ function CommentBox({
     onSuccess: async () => {
       setText("");
       setSent(true);
-      await queryClient.invalidateQueries({ queryKey: ["staff", "report"] });
+      await queryClient.invalidateQueries({ queryKey: reportDetailQuery(repo, number).queryKey });
     },
   });
   const length = [...text.trim()].length;
@@ -120,7 +126,25 @@ function CommentBox({
   );
 }
 
-function Detail({ number, detail }: { number: number; detail: ReportDetail }) {
+type PendingAction = Dimension | "assignee" | "close" | "reopen";
+
+type WriteAction =
+  | { kind: Dimension; id: string }
+  | { kind: "assignee"; login: string | null }
+  | { kind: "close"; choice: CloseChoice }
+  | { kind: "reopen"; initialStatus: string };
+
+function Detail({
+  number,
+  detail,
+  refreshing,
+  onRefresh,
+}: {
+  number: number;
+  detail: ReportDetail;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
   const t = useT();
   const format = useFormatter();
   const { taxonomy } = usePublicConfig();
@@ -132,26 +156,77 @@ function Detail({ number, detail }: { number: number; detail: ReportDetail }) {
   const [duplicateRefused, setDuplicateRefused] = useState(false);
   const initial = taxonomy.status.find((value) => value.initial);
 
-  const write = useMutation({
-    mutationFn: (run: () => Promise<void>) => run(),
-    onMutate: () => setDuplicateRefused(false),
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["staff", "report"] });
-      await queryClient.invalidateQueries({ queryKey: ["staff", "reports"] });
-    },
-  });
   const closeDialog = () => {
     setClosing(false);
     setDialogKey((key) => key + 1);
   };
-  const closeWith = (choice: CloseChoice) =>
-    write.mutate(() => writes.close(repo, number, choice), {
-      onSuccess: closeDialog,
-      onError: (error) => {
+
+  const write = useMutation({
+    mutationFn: (action: WriteAction): Promise<GitHubIssue> => {
+      switch (action.kind) {
+        case "assignee":
+          return writes.assign(repo, number, action.login);
+        case "close":
+          return writes.close(repo, number, action.choice);
+        case "reopen":
+          return writes.reopen(repo, number, action.initialStatus);
+        default:
+          return writes.setDimension(repo, number, action.kind, action.id);
+      }
+    },
+    onMutate: async (action) => {
+      setDuplicateRefused(false);
+      if (action.kind === "close" || action.kind === "reopen") return {};
+      const detailKey = reportDetailQuery(repo, number).queryKey;
+      const listKey = reportsQuery(repo).queryKey;
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: detailKey }),
+        queryClient.cancelQueries({ queryKey: listKey }),
+      ]);
+      const previousDetail = queryClient.getQueryData(detailKey);
+      const previousList = queryClient.getQueryData(listKey);
+      const assignable = queryClient.getQueryData(assignableQuery(repo).queryKey);
+      const apply = (issue: GitHubIssue) =>
+        action.kind === "assignee"
+          ? setAssigneeOptimistically(issue, action.login, assignable)
+          : setDimensionOptimistically(issue, action.kind, action.id);
+
+      if (previousDetail) {
+        queryClient.setQueryData(detailKey, (current) =>
+          current ? { ...current, issue: apply(current.issue) } : current,
+        );
+      }
+      if (previousList) {
+        queryClient.setQueryData(listKey, (issues) =>
+          issues?.map((issue) => (issue.number === number ? apply(issue) : issue)),
+        );
+      }
+      return { detailKey, listKey, previousDetail, previousList };
+    },
+    onSuccess: (updated, action) => {
+      patchIssueInCaches(queryClient, repo, updated);
+      if (action.kind === "close") closeDialog();
+    },
+    onError: (error, action, context) => {
+      if (context?.detailKey && context.previousDetail !== undefined) {
+        queryClient.setQueryData(context.detailKey, context.previousDetail);
+      }
+      if (context?.listKey && context.previousList !== undefined) {
+        queryClient.setQueryData(context.listKey, context.previousList);
+      }
+      if (action.kind === "close") {
         if (error instanceof DuplicateOriginalError) setDuplicateRefused(true);
         closeDialog();
-      },
-    });
+      }
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: reportDetailQuery(repo, number).queryKey }),
+        queryClient.invalidateQueries({ queryKey: ["staff", "reports"] }),
+      ]);
+    },
+  });
+  const closeWith = (choice: CloseChoice) => write.mutate({ kind: "close", choice });
 
   const { row } = detail;
   const closed = row.state === "closed";
@@ -159,17 +234,32 @@ function Detail({ number, detail }: { number: number; detail: ReportDetail }) {
   const stateLabel = closed
     ? t(`status.state.${detail.closeReason ?? "fixed"}`)
     : t("status.state.open");
-  const busy = write.isPending;
+  const pendingAction: PendingAction | null = write.isPending
+    ? (write.variables?.kind ?? null)
+    : null;
+  const busy = pendingAction !== null;
 
   return (
     <div className="flex flex-col gap-6">
-      <Link
-        to="/staff/reports"
-        className="inline-flex w-fit items-center gap-1 text-sm text-link hover:underline"
-      >
-        <ArrowLeftIcon size={16} aria-hidden="true" />
-        {t("detail.back")}
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link
+          to="/staff/reports"
+          className="inline-flex w-fit items-center gap-1 text-sm text-link hover:underline"
+        >
+          <ArrowLeftIcon size={16} aria-hidden="true" />
+          {t("detail.back")}
+        </Link>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={onRefresh}
+          disabled={refreshing}
+        >
+          <SyncIcon size={16} aria-hidden="true" />
+          {refreshing ? t("reports.refreshing") : t("reports.refresh")}
+        </Button>
+      </div>
       <header className="flex flex-col gap-3 border-b border-border-subtle pb-3">
         <h1 className="text-[26px] leading-tight font-normal break-words md:text-[32px]">
           {row.title} <span className="text-muted-foreground">#{row.number}</span>
@@ -225,10 +315,12 @@ function Detail({ number, detail }: { number: number; detail: ReportDetail }) {
                     variant="secondary"
                     disabled={busy || initial === undefined}
                     onClick={() =>
-                      initial && write.mutate(() => writes.reopen(repo, number, initial.id))
+                      initial && write.mutate({ kind: "reopen", initialStatus: initial.id })
                     }
                   >
-                    {busy ? t("detail.reopen.reopening") : t("detail.reopen.button")}
+                    {pendingAction === "reopen"
+                      ? t("detail.reopen.reopening")
+                      : t("detail.reopen.button")}
                   </Button>
                 ) : (
                   <Button variant="secondary" disabled={busy} onClick={() => setClosing(true)}>
@@ -251,9 +343,8 @@ function Detail({ number, detail }: { number: number; detail: ReportDetail }) {
               taxonomy={taxonomy}
               editable={maintenance && !(dimension === "status" && closed)}
               busy={busy}
-              onChange={(id) =>
-                write.mutate(() => writes.setDimension(repo, number, dimension, id))
-              }
+              saving={pendingAction === dimension}
+              onChange={(id) => write.mutate({ kind: dimension, id })}
             />
           ))}
           <AssigneeSection
@@ -261,7 +352,8 @@ function Detail({ number, detail }: { number: number; detail: ReportDetail }) {
             repo={repo}
             editable={maintenance}
             busy={busy}
-            onChange={(login) => write.mutate(() => writes.assign(repo, number, login))}
+            saving={pendingAction === "assignee"}
+            onChange={(login) => write.mutate({ kind: "assignee", login })}
           />
           {maintenance ? <ContactSection number={number} /> : null}
         </aside>
@@ -271,7 +363,7 @@ function Detail({ number, detail }: { number: number; detail: ReportDetail }) {
         <CloseDialog
           key={dialogKey}
           open={closing}
-          busy={busy}
+          busy={pendingAction === "close"}
           onClose={closeDialog}
           onConfirm={closeWith}
         />
@@ -328,5 +420,12 @@ export function Component() {
       </p>
     );
   }
-  return <Detail number={number} detail={detail} />;
+  return (
+    <Detail
+      number={number}
+      detail={detail}
+      refreshing={query.isFetching}
+      onRefresh={() => void query.refetch()}
+    />
+  );
 }

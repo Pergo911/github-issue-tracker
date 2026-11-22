@@ -48,7 +48,11 @@ describe("a label write", () => {
       token: admin,
       json: { labels: ["category:plumbing", "priority:high", "status:new"] },
     });
-    await writesFor(triage).setDimension(repo, 1, "status", "in-progress");
+    const updated = await writesFor(triage).setDimension(repo, 1, "status", "in-progress");
+    expect(updated.number).toBe(1);
+    expect(updated.labels.map((label) => label.name)).toEqual(
+      expect.arrayContaining(["category:plumbing", "priority:high", "status:in-progress"]),
+    );
     expect(await names(1)).toEqual(
       expect.arrayContaining(["category:plumbing", "priority:high", "status:in-progress"]),
     );
@@ -104,7 +108,13 @@ describe("closing", () => {
   it("closes as fixed in one PATCH that also drops the Status label", async () => {
     const { writesFor, create, issue, patches, triage } = await setup();
     await create({ title: "t", labels: ["priority:low", "status:in-progress"] });
-    await writesFor(triage).close(repo, 1, { reason: "fixed" });
+    const closed = await writesFor(triage).close(repo, 1, { reason: "fixed" });
+    expect(closed).toMatchObject({
+      number: 1,
+      state: "closed",
+      state_reason: "completed",
+      labels: [{ name: "priority:low" }],
+    });
     expect(await issue(1)).toMatchObject({
       state: "closed",
       state_reason: "completed",
@@ -116,7 +126,8 @@ describe("closing", () => {
   it("closes as rejected", async () => {
     const { writesFor, create, issue, triage } = await setup();
     await create({ title: "t", labels: ["status:new"] });
-    await writesFor(triage).close(repo, 1, { reason: "rejected" });
+    const closed = await writesFor(triage).close(repo, 1, { reason: "rejected" });
+    expect(closed).toMatchObject({ state: "closed", state_reason: "not_planned" });
     expect(await issue(1)).toMatchObject({ state: "closed", state_reason: "not_planned" });
   });
 
@@ -124,7 +135,8 @@ describe("closing", () => {
     const { writesFor, create, issue, triage } = await setup();
     await create({ title: "original" });
     await create({ title: "copy", labels: ["status:new"] });
-    await writesFor(triage).close(repo, 2, { reason: "duplicate", duplicateOf: 1 });
+    const closed = await writesFor(triage).close(repo, 2, { reason: "duplicate", duplicateOf: 1 });
+    expect(closed).toMatchObject({ state: "closed", state_reason: "duplicate", labels: [] });
     expect(await issue(2)).toMatchObject({
       state: "closed",
       state_reason: "duplicate",
@@ -152,7 +164,12 @@ describe("reopening", () => {
     await create({ title: "t", labels: ["priority:low", "status:retired"] });
     await writesFor(triage).close(repo, 1, { reason: "fixed" });
     requests.length = 0;
-    await writesFor(triage).reopen(repo, 1, "new");
+    const reopened = await writesFor(triage).reopen(repo, 1, "new");
+    expect(reopened).toMatchObject({
+      number: 1,
+      state: "open",
+      labels: [{ name: "priority:low" }, { name: "status:new" }],
+    });
     expect(await issue(1)).toMatchObject({
       state: "open",
       labels: [{ name: "priority:low" }, { name: "status:new" }],
@@ -165,11 +182,13 @@ describe("assigning", () => {
   it("sets and clears the one assignee without reading labels", async () => {
     const { writesFor, create, issue, triage } = await setup();
     await create({ title: "t", labels: ["status:new"] });
-    await writesFor(triage).assign(repo, 1, "tamas-triage");
+    const assigned = await writesFor(triage).assign(repo, 1, "tamas-triage");
+    expect(assigned.assignees.map((user) => user.login)).toEqual(["tamas-triage"]);
     expect((await issue(1)).assignees.map((user: { login: string }) => user.login)).toEqual([
       "tamas-triage",
     ]);
-    await writesFor(triage).assign(repo, 1, null);
+    const unassigned = await writesFor(triage).assign(repo, 1, null);
+    expect(unassigned.assignees).toEqual([]);
     expect((await issue(1)).assignees).toEqual([]);
   });
 });
@@ -178,7 +197,9 @@ describe("commenting", () => {
   it("posts as the signed-in member, which is all a Viewer may do", async () => {
     const { writesFor, create, client, read, path } = await setup();
     await create({ title: "t" });
-    await writesFor(read).comment(repo, 1, "On it.");
+    const posted = await writesFor(read).comment(repo, 1, "On it.");
+    expect(posted).toMatchObject({ body: "On it.", user: { login: "vera-viewer" } });
+    expect(posted.issue_url).toMatch(/\/issues\/1$/);
     const comments = (await client.github("GET", path("/issues/1/comments"), { token: read }))
       .json as { body: string; user: { login: string } }[];
     expect(comments).toMatchObject([{ body: "On it.", user: { login: "vera-viewer" } }]);

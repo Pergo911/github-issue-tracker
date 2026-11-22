@@ -123,6 +123,7 @@ export const en = {
   "board.card.menu": "Status of {title}",
   "board.card.roleDescription": "Draggable report",
   "board.card.choose": "Choose a Status",
+  "board.card.saving": "Saving…",
   "board.drag.instructions":
     "Press Space or Enter to pick up the report, the arrow keys to move it to another column, and Space or Enter to drop it. Escape cancels.",
   "board.drag.start": "Picked up {title}.",
@@ -204,6 +205,7 @@ export const en = {
   "detail.sidebar.priority": "Priority",
   "detail.sidebar.assignee": "Assignee",
   "detail.sidebar.reporter": "Reporter",
+  "detail.sidebar.saving": "Saving…",
   "detail.picker.unset": "Not set",
   "detail.picker.unassigned": "No one",
   "detail.picker.loading": "Loading…",

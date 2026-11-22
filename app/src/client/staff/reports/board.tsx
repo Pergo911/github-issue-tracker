@@ -116,6 +116,7 @@ function MovableCard({
   now,
   scan,
   taxonomy,
+  pending,
   onMove,
 }: {
   row: ReportRow;
@@ -123,6 +124,7 @@ function MovableCard({
   now: number;
   scan: ReporterScan | undefined;
   taxonomy: Taxonomy;
+  pending: boolean;
   onMove: (number: number, status: string) => void;
 }) {
   const t = useT();
@@ -130,11 +132,13 @@ function MovableCard({
   const { ref, handleRef, isDragging } = useDraggable<CardData>({
     id: row.number,
     type: "card",
+    disabled: pending,
     data: { title: row.title, column },
   });
   return (
     <li
       ref={ref}
+      aria-busy={pending || undefined}
       className={cn(cardClass, isDragging && "border-accent-emphasis shadow-floating")}
       data-report={row.number}
     >
@@ -146,9 +150,10 @@ function MovableCard({
           <button
             ref={handleRef}
             type="button"
+            disabled={pending}
             aria-label={t("board.card.grip", { title: row.title })}
             aria-roledescription={t("board.card.roleDescription")}
-            className="-ml-1 inline-flex size-7 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-accent-emphasis active:cursor-grabbing"
+            className="-ml-1 inline-flex size-7 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-accent-emphasis active:cursor-grabbing disabled:pointer-events-none disabled:opacity-60"
             data-grip=""
           >
             <GrabberIcon size={16} aria-hidden="true" />
@@ -162,9 +167,23 @@ function MovableCard({
         labelledBy={menuId}
         value={row.status}
         placeholder={t("board.card.choose")}
+        disabled={pending}
         options={taxonomy.status.map((value) => ({ value: value.id, label: value.name }))}
         onChange={(status) => onMove(row.number, status)}
       />
+      {pending ? (
+        <div
+          role="status"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+          data-card-saving=""
+        >
+          <span
+            aria-hidden="true"
+            className="size-3 animate-spin rounded-full border-2 border-border border-t-link motion-reduce:animate-none"
+          />
+          <span>{t("board.card.saving")}</span>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -243,6 +262,7 @@ export function Board({
   now,
   scan,
   canMove,
+  pendingCards,
   onMove,
 }: {
   rows: readonly ReportRow[];
@@ -250,6 +270,7 @@ export function Board({
   now: number;
   scan: ReporterScan | undefined;
   canMove: boolean;
+  pendingCards?: ReadonlySet<number>;
   onMove: (number: number, status: string) => void;
 }) {
   const t = useT();
@@ -274,6 +295,7 @@ export function Board({
         if (event.canceled) return;
         const { source, target } = event.operation;
         if (!source || !target || target.id === CORRECTION_COLUMN) return;
+        if (pendingCards?.has(Number(source.id))) return;
         if ((source.data as CardData).column === target.id) return;
         onMove(Number(source.id), String(target.id));
       }}
@@ -299,6 +321,7 @@ export function Board({
                       now={now}
                       scan={scan}
                       taxonomy={taxonomy}
+                      pending={pendingCards?.has(row.number) ?? false}
                       onMove={onMove}
                     />
                   ) : (

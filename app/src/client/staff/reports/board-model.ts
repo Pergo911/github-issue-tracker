@@ -1,6 +1,6 @@
 import type { PublicConfig } from "@shared/config/public.ts";
-import type { GitHubIssue, GitHubLabel } from "@shared/github/types.ts";
-import { setDimension } from "@shared/reports/labels.ts";
+import type { GitHubIssue } from "@shared/github/types.ts";
+import { setDimensionOptimistically } from "./cache.ts";
 import { sortReports, type ReportRow } from "./model.ts";
 
 type Taxonomy = PublicConfig["taxonomy"];
@@ -43,17 +43,7 @@ export function moveOptimistically(
   number: number,
   status: string,
 ): GitHubIssue[] {
-  return issues.map((issue) => {
-    if (issue.number !== number) return issue;
-    const names = setDimension(
-      issue.labels.map((label) => label.name),
-      "status",
-      status,
-    );
-    const known = new Map(issue.labels.map((label) => [label.name, label]));
-    return {
-      ...issue,
-      labels: names.map((name) => known.get(name) ?? ({ name } as GitHubLabel)),
-    };
-  });
+  return issues.map((issue) =>
+    issue.number === number ? setDimensionOptimistically(issue, "status", status) : issue,
+  );
 }

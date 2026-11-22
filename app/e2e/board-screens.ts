@@ -97,6 +97,8 @@ interface Options {
   comments?: "serve" | "hold";
   /** Every PATCH of a Report fails. */
   failPatch?: boolean;
+  /** Hold PATCH requests indefinitely so the per-card saving indicator stays visible. */
+  holdPatch?: boolean;
 }
 
 function signedIn(role: Role, options: Options = {}) {
@@ -109,10 +111,11 @@ function signedIn(role: Role, options: Options = {}) {
       if (options.comments === "hold" && route.request().method() === "GET") return;
       return respond(route, comments);
     });
-    if (options.failPatch) {
+    if (options.failPatch || options.holdPatch) {
       await page.route(/\/repos\/[^/]+\/[^/]+\/issues\/\d+$/, (route) => {
         const request = route.request();
         if (request.method() === "PATCH") {
+          if (options.holdPatch) return;
           return route.fulfill({
             status: 500,
             contentType: "application/json",
@@ -230,6 +233,22 @@ export const boardScreens: Screen[] = [
       await page.getByRole("listbox").getByRole("option").nth(2).click();
       await expect(page.getByRole("alert")).toBeVisible(SLOW);
       await expect(page.locator('[data-column="new"] [data-report="44"]')).toBeVisible();
+    },
+    allowText,
+  },
+  {
+    id: "board-card-saving",
+    description:
+      "A card whose Status move is in flight: disabled grip and menu, aria-busy, and the inline saving indicator.",
+    server: "seeded",
+    path: "/staff/reports?layout=board",
+    prepare: signedIn("maintenance", { holdPatch: true }),
+    ready: async (page) => {
+      await boardShown(page);
+      await cardMenu(page, 44).click();
+      await page.getByRole("listbox").getByRole("option").nth(1).click();
+      await expect(page.locator('[data-report="44"][aria-busy="true"]')).toBeVisible(SLOW);
+      await expect(page.locator('[data-report="44"] [data-card-saving]')).toBeVisible(SLOW);
     },
     allowText,
   },

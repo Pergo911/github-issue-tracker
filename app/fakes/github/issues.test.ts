@@ -490,3 +490,73 @@ describe("listing the assignable users", () => {
     expect((await client.github("GET", path("/assignees"), { token: outsider })).status).toBe(404);
   });
 });
+
+describe("caching headers and conditional GETs (ETag / 304)", () => {
+  it("sends Cache-Control: private, max-age=60, s-maxage=60 and ETag, answers 304 on If-None-Match, and refreshes on mutation", async () => {
+    const { client, admin, read, path, create } = await setup();
+    await create({ title: "t", labels: ["status:new"] });
+
+    for (const endpoint of [
+      "/issues",
+      "/issues/1",
+      "/issues/1/timeline",
+      "/issues/1/comments",
+      "/issues/comments",
+      "/assignees",
+    ]) {
+      const first = await client.github("GET", path(endpoint), { token: read });
+      expect(first.status).toBe(200);
+      expect(first.headers.get("cache-control")).toBe("private, max-age=60, s-maxage=60");
+      const etag = first.headers.get("etag");
+      expect(etag).toBeTruthy();
+
+      const notModified = await client.github("GET", path(endpoint), {
+        token: read,
+        headers: { "if-none-match": etag! },
+      });
+      expect(notModified.status).toBe(304);
+      expect(notModified.text).toBe("");
+      expect(notModified.headers.get("etag")).toBe(etag);
+      expect(notModified.headers.get("cache-control")).toBe("private, max-age=60, s-maxage=60");
+    }
+
+    // Mutate the issue and verify the old ETag yields 200 with a new ETag and updated payload.
+    const issueFirst = await client.github("GET", path("/issues/1"), { token: read });
+    const oldEtag = issueFirst.headers.get("etag")!;
+    await client.github("PATCH", path("/issues/1"), {
+      token: admin,
+      json: { labels: ["status:in-progress"] },
+    });
+    const afterPatch = await client.github("GET", path("/issues/1"), {
+      token: read,
+      headers: { "if-none-match": oldEtag },
+    });
+    expect(afterPatch.status).toBe(200);
+    expect(afterPatch.headers.get("etag")).not.toBe(oldEtag);
+    expect(afterPatch.json.labels.map((l: { name: string }) => l.name)).toEqual([
+      "status:in-progress",
+    ]);
+  });
+
+  it("preserves Link headers on paginated 304 responses", async () => {
+    const { client, read, path, create } = await setup();
+    await create({ title: "one" });
+    await create({ title: "two" });
+    const first = await client.github("GET", path("/issues"), {
+      token: read,
+      query: { per_page: 1 },
+    });
+    expect(first.status).toBe(200);
+    const etag = first.headers.get("etag")!;
+    const link = first.headers.get("link")!;
+    expect(link).toContain('rel="next"');
+
+    const cached = await client.github("GET", path("/issues"), {
+      token: read,
+      query: { per_page: 1 },
+      headers: { "if-none-match": etag },
+    });
+    expect(cached.status).toBe(304);
+    expect(cached.headers.get("link")).toBe(link);
+  });
+});
