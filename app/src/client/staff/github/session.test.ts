@@ -218,7 +218,7 @@ describe("githubFetch", () => {
     expect(sentIfNoneMatch).toEqual([null, 'W/"v1"', 'W/"v1"', 'W/"v1"', 'W/"v2"']);
   });
 
-  it("bypasses the ETag cache for non-GET calls, missing ETag responses, and caller If-None-Match", async () => {
+  it("bypasses the ETag cache for caller If-None-Match and clears the entry when a 200 omits ETag", async () => {
     const sentIfNoneMatch: (string | null)[] = [];
     let calls = 0;
     const session = createStaffSession({
@@ -236,13 +236,116 @@ describe("githubFetch", () => {
     await session.githubFetch("/item");
     // Caller-supplied If-None-Match must not be overwritten.
     await session.githubFetch("/item", { headers: { "if-none-match": '"custom"' } });
-    // Non-GET must not send cached ETag.
-    await session.githubFetch("/item", { method: "PATCH", body: "{}" });
     // Second GET got 200 without ETag, so the cache entry was cleared.
     await session.githubFetch("/item");
     await session.githubFetch("/item");
 
-    expect(sentIfNoneMatch).toEqual([null, '"custom"', null, '"e1"', null]);
+    expect(sentIfNoneMatch).toEqual([null, '"custom"', '"e1"', null]);
+  });
+
+  it("evicts the ETag cache after successful POST, PATCH, PUT, and DELETE mutations across cached paths", async () => {
+    for (const method of ["POST", "PATCH", "PUT", "DELETE"] as const) {
+      const sentIfNoneMatch: { path: string; method: string; header: string | null }[] = [];
+      const session = createStaffSession({
+        store: newStore(),
+        githubBase: base,
+        refresh: async () => pair(1),
+        fetch: async (input, init) => {
+          const reqMethod = (init?.method ?? "GET").toUpperCase();
+          const path = new URL(String(input)).pathname;
+          sentIfNoneMatch.push({
+            path,
+            method: reqMethod,
+            header: new Headers(init?.headers).get("if-none-match"),
+          });
+          if (reqMethod === "GET") {
+            return json({ ok: true }, { headers: { etag: `"etag-${path}"` } });
+          }
+          return method === "DELETE"
+            ? new Response(null, { status: 204 })
+            : json({ id: 99 }, { status: 201 });
+        },
+      });
+
+      await session.githubFetch("/repos/o/r/issues/1");
+      await session.githubFetch("/repos/o/r/issues/1/timeline");
+      await session.githubFetch("/repos/o/r/issues/1/comments", {
+        method,
+        ...(method === "DELETE" ? {} : { body: "{}" }),
+      });
+      await session.githubFetch("/repos/o/r/issues/1");
+      await session.githubFetch("/repos/o/r/issues/1/timeline");
+
+      expect(sentIfNoneMatch).toEqual([
+        { path: "/repos/o/r/issues/1", method: "GET", header: null },
+        { path: "/repos/o/r/issues/1/timeline", method: "GET", header: null },
+        { path: "/repos/o/r/issues/1/comments", method, header: null },
+        { path: "/repos/o/r/issues/1", method: "GET", header: null },
+        { path: "/repos/o/r/issues/1/timeline", method: "GET", header: null },
+      ]);
+    }
+  });
+
+  it("keeps cached ETags when a mutation fails", async () => {
+    const sentIfNoneMatch: (string | null)[] = [];
+    const session = createStaffSession({
+      store: newStore(),
+      githubBase: base,
+      refresh: async () => pair(1),
+      fetch: async (_input, init) => {
+        const reqMethod = (init?.method ?? "GET").toUpperCase();
+        sentIfNoneMatch.push(new Headers(init?.headers).get("if-none-match"));
+        if (reqMethod === "POST") return json({ message: "Validation Failed" }, { status: 422 });
+        return json({ ok: true }, { headers: { etag: '"e1"' } });
+      },
+    });
+
+    await session.githubFetch("/repos/o/r/issues/1/timeline");
+    const failed = await session.githubFetch("/repos/o/r/issues/1/comments", {
+      method: "POST",
+      body: "{}",
+    });
+    expect(failed.status).toBe(422);
+    await session.githubFetch("/repos/o/r/issues/1/timeline");
+
+    expect(sentIfNoneMatch).toEqual([null, null, '"e1"']);
+  });
+
+  it("prevents an in-flight GET started before a mutation from re-populating the ETag cache", async () => {
+    let releaseGet!: () => void;
+    const getGate = new Promise<void>((resolve) => {
+      releaseGet = resolve;
+    });
+    const sentIfNoneMatch: (string | null)[] = [];
+    let getCount = 0;
+
+    const session = createStaffSession({
+      store: newStore(),
+      githubBase: base,
+      refresh: async () => pair(1),
+      fetch: async (_input, init) => {
+        const reqMethod = (init?.method ?? "GET").toUpperCase();
+        sentIfNoneMatch.push(new Headers(init?.headers).get("if-none-match"));
+        if (reqMethod === "POST") {
+          return json({ id: 42 }, { status: 201 });
+        }
+        getCount += 1;
+        if (getCount === 1) {
+          await getGate;
+          return json([], { headers: { etag: '"stale-etag"' } });
+        }
+        return json([{ id: 42 }], { headers: { etag: '"fresh-etag"' } });
+      },
+    });
+
+    const slowGet = session.githubFetch("/repos/o/r/issues/1/timeline");
+    await Promise.resolve();
+    await session.githubFetch("/repos/o/r/issues/1/comments", { method: "POST", body: "{}" });
+    releaseGet();
+    await slowGet;
+
+    await session.githubFetch("/repos/o/r/issues/1/timeline");
+    expect(sentIfNoneMatch).toEqual([null, null, null]);
   });
 
   it("clears the ETag cache when the token changes, on sign-out, or on 401 session end", async () => {

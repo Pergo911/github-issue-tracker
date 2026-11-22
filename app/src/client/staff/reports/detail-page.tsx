@@ -20,6 +20,7 @@ import { staffSession } from "../auth/session.ts";
 import { useStaff } from "../auth/staff-context.tsx";
 import { GitHubHttpError } from "../github/session.ts";
 import {
+  appendCommentToDetailCache,
   patchIssueInCaches,
   setAssigneeOptimistically,
   setDimensionOptimistically,
@@ -56,10 +57,13 @@ function CommentBox({
   const [sent, setSent] = useState(false);
   const send = useMutation({
     mutationFn: (value: string) => writes.comment(repo, number, value),
-    onSuccess: async () => {
+    onSuccess: (created) => {
       setText("");
       setSent(true);
-      await queryClient.invalidateQueries({ queryKey: reportDetailQuery(repo, number).queryKey });
+      const detailKey = reportDetailQuery(repo, number).queryKey;
+      void queryClient.cancelQueries({ queryKey: detailKey });
+      appendCommentToDetailCache(queryClient, repo, number, created);
+      void queryClient.invalidateQueries({ queryKey: detailKey });
     },
   });
   const length = [...text.trim()].length;

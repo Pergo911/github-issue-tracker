@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import type { AsyncControl } from "../fakes/control.ts";
+import { hu } from "../src/shared/i18n/hu.ts";
 import { buildReporterComment } from "../src/shared/reports/attribution.ts";
 import { controlUrl, urlFor } from "./support/servers.ts";
 import { waitForMails } from "./support/mail.ts";
@@ -268,5 +269,83 @@ test.describe("the Status page", () => {
     await open(page, "A".repeat(22));
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.locator("main")).toContainText("levelet");
+  });
+
+  test("posting a Reporter comment renders immediately without waiting on status lookup and survives a stale lookup response", async ({
+    page,
+    request,
+    world,
+  }) => {
+    const filed = await fileReport(request, world, page);
+    let initialView: unknown;
+    page.on("response", async (response) => {
+      if (
+        initialView === undefined &&
+        response.url().includes("/api/status/lookup") &&
+        response.request().method() === "POST" &&
+        response.status() === 200
+      ) {
+        initialView = await response.json();
+      }
+    });
+
+    await open(page, filed.token);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect.poll(() => initialView !== undefined).toBe(true);
+
+    let holdLookup = true;
+    let lookupStarted = false;
+    let releaseLookup!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseLookup = resolve;
+    });
+
+    await page.route("**/api/status/lookup", async (route) => {
+      if (holdLookup && route.request().method() === "POST") {
+        holdLookup = false;
+        lookupStarted = true;
+        await gate;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(initialView),
+        });
+      }
+      return route.fallback();
+    });
+
+    try {
+      const text = "Azonnali megjegyzés";
+      await sendComment(page, text);
+
+      // Renders immediately on POST /api/status/comment while the follow-up lookup is still in flight.
+      await expect.poll(() => lookupStarted).toBe(true);
+      await expect(comments(page)).toHaveCount(1);
+      await expect(comments(page).first()).toContainText(text);
+      await expect(page.locator("#comment")).toHaveValue("");
+      await expect(page.locator("#comment")).toBeEnabled();
+      await expect(page.locator("form button[type=submit]")).toHaveText(
+        hu["status.comment.submit"],
+      );
+      await expect(page.getByRole("status")).toBeVisible();
+
+      // Releasing a stale cached StatusView never erases the posted comment.
+      const staleLookup = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/status/lookup") && response.request().method() === "POST",
+      );
+      releaseLookup();
+      await staleLookup;
+      await expect(comments(page)).toHaveCount(1);
+      await expect(comments(page).first()).toContainText(text);
+
+      // A full reload fetches the fresh StatusView and renders the comment exactly once.
+      await page.unroute("**/api/status/lookup");
+      await page.reload();
+      await expect(comments(page)).toHaveCount(1);
+      await expect(comments(page).first()).toContainText(text);
+    } finally {
+      releaseLookup();
+    }
   });
 });

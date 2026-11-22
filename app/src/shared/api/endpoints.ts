@@ -10,7 +10,7 @@ import {
 } from "../reports/recovery.ts";
 import type { Config } from "../config/schema.ts";
 import { FIELD_ERRORS } from "../reports/validate.ts";
-import type { StatusView } from "../status/view.ts";
+import type { StatusCommentItem, StatusView } from "../status/view.ts";
 import { STAFF_ROLES } from "../github/roles.ts";
 import type {
   AddStaffResult,
@@ -161,7 +161,7 @@ export const endpoints = {
     method: "POST",
     path: "/api/status/comment",
     request: z.object({ token: z.string().max(200), text: z.string().max(20_000) }),
-    response: type<{ accepted: true }>(),
+    response: type<{ accepted: true; comment: StatusCommentItem }>(),
     errors: { comment_length: 422, not_configured: 404 },
   }),
 

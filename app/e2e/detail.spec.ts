@@ -238,3 +238,85 @@ test("editing a dimension on a closed Report does not flip the Reopen button to 
     releasePatch();
   }
 });
+
+test("posting a Staff comment renders immediately without waiting on timeline refetch, clears stale ETags, and survives a stale timeline response", async ({
+  page,
+  world,
+}) => {
+  const title = tag();
+  const { number } = await world.createReport({
+    title,
+    labels: ["category:elevator", "location:stairwell", "priority:low", "status:new"],
+  });
+  const { token } = await staffToken(`e2e-detail-fast-comment-${title}`, "maintenance");
+  await startSignedIn(page, token);
+  await page.goto(urlFor("seeded", `/staff/reports/${number}`));
+  await expect(page.getByRole("heading", { level: 1, name: new RegExp(title) })).toBeVisible(SLOW);
+
+  let holdTimeline = true;
+  let capturedIfNoneMatch: string | null | undefined;
+  let releaseTimeline!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    releaseTimeline = resolve;
+  });
+  const timelinePattern = new RegExp(`/issues/${number}/timeline`);
+
+  await page.route(timelinePattern, async (route) => {
+    if (holdTimeline && route.request().method() === "GET") {
+      holdTimeline = false;
+      capturedIfNoneMatch = await route.request().headerValue("if-none-match");
+      await gate;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-expose-headers": "ETag, Link",
+          "cache-control": "private, max-age=60, s-maxage=60",
+          etag: '"stale-pre-comment"',
+        },
+        body: "[]",
+      });
+    }
+    return route.fallback();
+  });
+
+  try {
+    const body = `immediate-${title}`;
+    await page.locator("#comment").fill(body);
+    await page.locator("form button[type=submit]").click();
+
+    // Renders immediately on POST 201 while the follow-up timeline GET is still held.
+    await expect(page.getByText(body)).toBeVisible(SLOW);
+    await expect(page.locator("#comment")).toHaveValue("");
+    await expect(page.locator("#comment")).toBeEnabled();
+    await expect(page.locator("form button[type=submit]")).toHaveText(hu["detail.comment.submit"]);
+    await expect(page.getByRole("status")).toContainText(hu["detail.comment.sent"]);
+    await expect.poll(() => capturedIfNoneMatch, SLOW).toBe(null);
+
+    // A stale timeline GET response never erases the just-posted comment.
+    const staleResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/issues/${number}/timeline`) &&
+        response.request().method() === "GET",
+    );
+    releaseTimeline();
+    await staleResponse;
+    await expect(page.getByRole("button", { name: hu["reports.refresh"] })).toBeEnabled(SLOW);
+    await expect(page.getByText(body)).toHaveCount(1);
+
+    // Refreshing against live/fake GitHub converges cleanly with no duplicate.
+    await page.unroute(timelinePattern);
+    const freshTimeline = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/issues/${number}/timeline`) &&
+        response.request().method() === "GET",
+    );
+    await page.getByRole("button", { name: hu["reports.refresh"] }).click();
+    await freshTimeline;
+    await expect(page.getByRole("button", { name: hu["reports.refresh"] })).toBeEnabled(SLOW);
+    await expect(page.getByText(body)).toHaveCount(1);
+  } finally {
+    releaseTimeline();
+  }
+});
