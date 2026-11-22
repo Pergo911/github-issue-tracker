@@ -14,6 +14,7 @@ Fault-reporting and maintenance-tracking system (*Hibabejelentő és karbantart�
 | --- | --- |
 | [`app/`](./app) | React 19 SPA, Cloudflare Worker (KV, Durable Objects, Resend), and local fake GitHub/Resend world |
 | [`shell/`](./shell) | Windows Electron desktop wrapper around the hosted SPA |
+| [`website/`](./website) | Bilingual (EN + HU) VitePress documentation site deployed to GitHub Pages |
 | [`docs/`](./docs) | Architecture Decision Records ([`docs/adr/`](./docs/adr)), UI conventions, and operational runbooks |
 
 ## Local development
@@ -43,6 +44,7 @@ Run `npm run verify` in `app/` or `shell/` for the full verification suite.
 
 ## Documentation
 
+- **Documentation site (EN + HU):** <https://pergo911.github.io/github-issue-tracker/> (source in [`website/`](./website))
 - [`SPEC.md`](./SPEC.md) — system design and source of truth
 - [`GLOSSARY.md`](./GLOSSARY.md) — domain terminology
 - [`docs/runbook-deployment.md`](./docs/runbook-deployment.md) — deploying an Organization's copy (reference Deployment: <https://fault-reports.berautoapp.workers.dev>)

@@ -15,6 +15,7 @@ on:
       - "docs/**"
       - "**/*.md"
       - "shell/**"
+      - "website/**"
       - ".agents/**"
       - ".claude/**"
 
