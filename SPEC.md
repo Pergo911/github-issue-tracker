@@ -1217,7 +1217,7 @@ the fake was taught live's behaviour, or the code was changed with a test. What 
   grant type, and a refresh token GitHub never issued, answer `incorrect_client_credentials` (HTTP 200), not
   `unsupported_grant_type` or `bad_refresh_token`; the Worker treats it as `refresh_rejected`. Polling twice at
   once answers `slow_down` with `interval: 10`. Refresh of a _valid_ token without `client_secret` (decision 13)
-  refresh: it needs an approved device code, which only a person can give.
+  was not re-run here: it needs an approved device code, which only a person can give.
 - **Caching and CORS.** `GET` endpoints (`/issues`, `/issues/:n`, `/issues/:n/timeline`, `/issues/comments`, etc.)
   return `Cache-Control: private, max-age=60, s-maxage=60` and `ETag`. `Access-Control-Allow-Headers` permits
   `If-None-Match` (`304 Not Modified` costs 0 rate-limit quota) and **omits `Cache-Control` and `Pragma`**, so
