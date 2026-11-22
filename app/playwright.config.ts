@@ -75,6 +75,7 @@ export default defineConfig({
         "recovery.spec.ts",
         "staff.spec.ts",
         "staff-members.spec.ts",
+        "select-theme.spec.ts",
         "admin.spec.ts",
         "status.spec.ts",
         "webhook.spec.ts",

@@ -145,6 +145,18 @@
     line-height: var(--text-body-lineHeight-medium);
   }
 
+  /*
+   * Native <select> popups on Windows Chromium/Electron fall back to a white backing surface when the
+   * <select> is transparent (Tailwind's preflight and FilterBar's bg-transparent), leaving dark-mode option
+   * text unreadable. Painting <option>/<optgroup> with the overlay tokens keeps every native popup legible
+   * in both schemes without altering closed-state surfaces (such as active filter chips).
+   */
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+
   /* Primer's focus ring */
   :focus-visible {
     outline: 2px solid var(--ring);
