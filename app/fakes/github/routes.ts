@@ -327,7 +327,7 @@ export class GitHubService {
 
     r.add("GET", repoBase, (c) => {
       const actor = this.#member(c);
-      return jsonResponse({
+      return cacheableJson(c.request, {
         ...this.#renderer(c.url).repository(actor.role),
         // An installation token's repo `permissions` are all false: its rights are in the token, not the repo.
         permissions: permissionsFor(actor.account.type === "Bot" ? "none" : actor.role),
@@ -352,7 +352,8 @@ export class GitHubService {
         c.url.searchParams.get("direction"),
         "asc",
       );
-      return paged(
+      return cacheablePaged(
+        c.request,
         c.url,
         comments.map((comment) => withHtml(c.request, renderer.comment(comment))),
       );
@@ -360,7 +361,8 @@ export class GitHubService {
 
     r.add("GET", `${repoBase}/issues/comments/:id`, (c) => {
       this.#member(c);
-      return jsonResponse(
+      return cacheableJson(
+        c.request,
         withHtml(
           c.request,
           this.#renderer(c.url).comment(this.#store.comment(Number(c.params["id"]))),
@@ -432,7 +434,8 @@ export class GitHubService {
         q.get("direction"),
         "desc",
       );
-      return paged(
+      return cacheablePaged(
+        c.request,
         c.url,
         issues.map((issue) => renderer.issue(issue)),
       );
@@ -456,7 +459,8 @@ export class GitHubService {
 
     r.add("GET", `${repoBase}/issues/:number`, (c) => {
       this.#member(c);
-      return jsonResponse(
+      return cacheableJson(
+        c.request,
         withHtml(
           c.request,
           this.#renderer(c.url).issue(this.#store.issue(Number(c.params["number"]))),
@@ -505,7 +509,8 @@ export class GitHubService {
       const comments = this.#store
         .commentsOn(number)
         .filter((comment) => since === null || comment.updatedAt >= since);
-      return paged(
+      return cacheablePaged(
+        c.request,
         c.url,
         comments.map((comment) => withHtml(c.request, renderer.comment(comment))),
       );
@@ -537,14 +542,15 @@ export class GitHubService {
           const rendered = renderer.timelineEvent(record);
           return rendered ? [rendered] : [];
         });
-      return paged(c.url, events);
+      return cacheablePaged(c.request, c.url, events);
     });
 
     // The users an issue can be assigned to: here, the members who can triage (not the Bot).
     r.add("GET", `${repoBase}/assignees`, (c) => {
       this.#member(c);
       const renderer = this.#renderer(c.url);
-      return paged(
+      return cacheablePaged(
+        c.request,
         c.url,
         [...this.#store.staff.values()]
           .filter((member) => roleRank(member.role) >= roleRank("triage"))
@@ -560,7 +566,8 @@ export class GitHubService {
         throw validation("affiliation", "invalid", "Collaborator");
       }
       const renderer = this.#renderer(c.url);
-      return paged(
+      return cacheablePaged(
+        c.request,
         c.url,
         this.#store.collaborators(affiliation).map((member) => renderer.collaborator(member)),
       );
@@ -569,7 +576,7 @@ export class GitHubService {
     r.add("GET", `${repoBase}/collaborators/:username/permission`, (c) => {
       this.#requireAdministration(c, "write");
       const member = this.#store.collaboratorPermission(c.params["username"] as string);
-      return jsonResponse(this.#renderer(c.url).collaboratorPermission(member));
+      return cacheableJson(c.request, this.#renderer(c.url).collaboratorPermission(member));
     });
 
     r.add("PUT", `${repoBase}/collaborators/:username`, async (c) => {
@@ -597,7 +604,8 @@ export class GitHubService {
     r.add("GET", `${repoBase}/invitations`, (c) => {
       this.#requireAdministration(c, "admin");
       const renderer = this.#renderer(c.url);
-      return paged(
+      return cacheablePaged(
+        c.request,
         c.url,
         this.#store.listInvitations().map((invitation) => renderer.invitation(invitation)),
       );
@@ -630,7 +638,8 @@ export class GitHubService {
     r.add("GET", `${repoBase}/labels`, (c) => {
       this.#member(c);
       const renderer = this.#renderer(c.url);
-      return paged(
+      return cacheablePaged(
+        c.request,
         c.url,
         [...this.#store.labels.values()].map((label) => renderer.label(label)),
       );
@@ -659,7 +668,7 @@ export class GitHubService {
       this.#member(c);
       const label = this.#store.label(c.params["name"] as string);
       if (!label) throw new GitHubFailure(404, "Not Found");
-      return jsonResponse(this.#renderer(c.url).label(label));
+      return cacheableJson(c.request, this.#renderer(c.url).label(label));
     });
 
     r.add("PATCH", `${repoBase}/labels/:name`, async (c) => {
@@ -685,7 +694,11 @@ export class GitHubService {
     r.add("GET", "/search/issues", (c) => {
       const actor = this.#authenticate(c.request);
       if (actor.role === "none")
-        return jsonResponse({ total_count: 0, incomplete_results: false, items: [] });
+        return cacheableJson(c.request, {
+          total_count: 0,
+          incomplete_results: false,
+          items: [],
+        });
       const query = c.url.searchParams.get("q");
       if (!query) throw validation("q", "missing", "Search");
       const matches = searchIssues(this.#store, query);
@@ -705,13 +718,13 @@ export class GitHubService {
       );
       const renderer = this.#renderer(c.url);
       const { page, link } = paginate(c.url, sorted);
-      return jsonResponse(
+      return cacheableJson(
+        c.request,
         {
           total_count: sorted.length,
           incomplete_results: false,
           items: page.map((issue) => renderer.issue(issue)),
         },
-        200,
         link ? { link } : {},
       );
     });
@@ -789,9 +802,58 @@ function withHtml<T extends { body?: string | null }>(request: Request, item: T)
   return { ...item, body_html: renderMarkdown(item.body ?? "") };
 }
 
-function paged(url: URL, items: unknown[]): Response {
+const CACHE_CONTROL = "private, max-age=60, s-maxage=60";
+
+async function computeWeakEtag(payload: string, link: string | null): Promise<string> {
+  const bytes = new TextEncoder().encode(link ? `${payload}\n${link}` : payload);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+  return `W/"${hex}"`;
+}
+
+function normalizeTag(tag: string): string {
+  const trimmed = tag.trim();
+  return trimmed.startsWith("W/") ? trimmed.slice(2) : trimmed;
+}
+
+function matchesIfNoneMatch(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  const trimmed = header.trim();
+  if (trimmed === "*") return true;
+  const target = normalizeTag(etag);
+  return trimmed
+    .split(",")
+    .map((part) => normalizeTag(part))
+    .includes(target);
+}
+
+async function cacheableJson(
+  request: Request,
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<Response> {
+  const payload = JSON.stringify(body);
+  const link = extraHeaders["link"] ?? null;
+  const etag = await computeWeakEtag(payload, link);
+  const cacheHeaders: Record<string, string> = {
+    "cache-control": CACHE_CONTROL,
+    etag,
+    ...extraHeaders,
+  };
+  if (matchesIfNoneMatch(request.headers.get("if-none-match"), etag)) {
+    return new Response(null, { status: 304, headers: cacheHeaders });
+  }
+  return new Response(payload, {
+    status: 200,
+    headers: { "content-type": "application/json; charset=utf-8", ...cacheHeaders },
+  });
+}
+
+function cacheablePaged(request: Request, url: URL, items: unknown[]): Promise<Response> {
   const { page, link } = paginate(url, items);
-  return jsonResponse(page, 200, link ? { link } : {});
+  return cacheableJson(request, page, link ? { link } : {});
 }
 
 function parseSince(url: URL): number | null {

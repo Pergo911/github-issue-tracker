@@ -55,6 +55,7 @@ interface Fixture {
   state?: "open" | "closed";
   stateReason?: "completed" | "not_planned" | "duplicate";
   assignees?: string[];
+  holdPatch?: boolean;
 }
 
 const user = (login: string, id: number, type = "User") => ({ login, id, type });
@@ -129,9 +130,10 @@ function serveDetail(fixture: Fixture = {}) {
         : []),
     ];
     await page.clock.setFixedTime(new Date("2026-03-10T12:00:00Z"));
-    await page.route(new RegExp(`${repoRoute.source}issues/${NUMBER}(\\?|$)`), (route) =>
-      respond(route, issue),
-    );
+    await page.route(new RegExp(`${repoRoute.source}issues/${NUMBER}(\\?|$)`), (route) => {
+      if (fixture.holdPatch && route.request().method() === "PATCH") return;
+      return respond(route, issue);
+    });
     await page.route(new RegExp(`${repoRoute.source}issues/${NUMBER}/timeline`), (route) =>
       respond(route, timeline),
     );
@@ -222,6 +224,21 @@ export const detailScreens: Screen[] = [
     path,
     prepare: signedIn("maintenance"),
     ready: shown,
+    allowText: detailData,
+  },
+  {
+    id: "detail-sidebar-saving",
+    description:
+      "A sidebar field whose edit is in flight: the optimistic value shown with the inline saving indicator next to that section heading.",
+    server: "seeded",
+    path,
+    prepare: signedIn("maintenance", { holdPatch: true }),
+    ready: async (page) => {
+      await shown(page);
+      await pickers(page).nth(1).click();
+      await page.getByRole("listbox").getByRole("option").first().click();
+      await expect(page.locator("[data-sidebar-saving]")).toBeVisible(SLOW);
+    },
     allowText: detailData,
   },
   {

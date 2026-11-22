@@ -59,6 +59,26 @@ describe("GET /repos/:owner/:repo/collaborators", () => {
     expect(outside.json.map((u: { login: string }) => u.login)).toEqual(["ext-viewer"]);
   });
 
+  it("returns Cache-Control and ETag on collaborators and invitations and answers 304 on If-None-Match", async () => {
+    const { world, client, org, repo } = await createTestWorld();
+    const admin = world.control.addStaff({ login: "ada-admin", role: "admin" });
+    for (const endpoint of [
+      `/repos/${org}/${repo}/collaborators`,
+      `/repos/${org}/${repo}/invitations`,
+    ]) {
+      const first = await client.github("GET", endpoint, { token: admin.token });
+      expect(first.status).toBe(200);
+      expect(first.headers.get("cache-control")).toBe("private, max-age=60, s-maxage=60");
+      const etag = first.headers.get("etag")!;
+      expect(etag).toBeTruthy();
+      const second = await client.github("GET", endpoint, {
+        token: admin.token,
+        headers: { "if-none-match": etag },
+      });
+      expect(second.status).toBe(304);
+    }
+  });
+
   it("paginates collaborators with Link headers", async () => {
     const { world, client, org, repo } = await createTestWorld();
     const admin = world.control.addStaff({ login: "ada-admin", role: "admin" });

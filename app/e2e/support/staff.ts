@@ -69,8 +69,10 @@ export function issuePayload(fixture: IssueFixture) {
 
 const CORS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, accept, x-github-api-version, content-type",
+  "access-control-allow-headers":
+    "authorization, accept, x-github-api-version, content-type, if-none-match",
   "access-control-allow-methods": "GET, POST, PATCH",
+  "access-control-expose-headers": "ETag, Link",
 };
 
 /** Fulfils a request with JSON, answering a CORS preflight itself. */
