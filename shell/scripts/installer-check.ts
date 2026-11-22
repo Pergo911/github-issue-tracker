@@ -238,12 +238,62 @@ try {
     await window.getByRole("heading", { level: 1 }).waitFor();
     if (!window.url().startsWith(appUrl))
       throw new Error(`the installed app loaded ${window.url()}`);
+
+    const readMenu = () =>
+      app.evaluate(({ Menu }) => {
+        const menu = Menu.getApplicationMenu();
+        if (!menu) return null;
+        const collectRoles = (items: Electron.MenuItem[]): string[] =>
+          items.flatMap((item) => [
+            item.role ? item.role.toLowerCase() : "",
+            ...(item.submenu ? collectRoles(item.submenu.items) : []),
+          ]);
+        return {
+          roles: collectRoles(menu.items),
+          backEnabled: menu.getMenuItemById("nav-back")?.enabled ?? null,
+          forwardEnabled: menu.getMenuItemById("nav-forward")?.enabled ?? null,
+          hasHome: menu.getMenuItemById("nav-home") !== null,
+          hasReload: menu.getMenuItemById("nav-reload") !== null,
+          hasForceReload: menu.getMenuItemById("nav-force-reload") !== null,
+        };
+      });
+    const clickMenu = (id: string) =>
+      app.evaluate(({ BrowserWindow, Menu }, itemId) => {
+        const item = Menu.getApplicationMenu()?.getMenuItemById(itemId);
+        const win = BrowserWindow.getAllWindows()[0];
+        if (!item || !win) throw new Error(`missing menu item ${itemId} or window`);
+        item.click({}, win, win.webContents);
+      }, id);
+
+    const startMenu = await readMenu();
+    if (!startMenu) throw new Error("the packaged app has no application menu");
+    if (startMenu.roles.includes("toggledevtools"))
+      throw new Error("the packaged app must not include toggleDevTools");
+    if (!startMenu.hasHome || !startMenu.hasReload || !startMenu.hasForceReload)
+      throw new Error("the packaged app is missing Navigation menu items");
+    if (startMenu.backEnabled !== false || startMenu.forwardEnabled !== false)
+      throw new Error("Back/Forward must start disabled on the home page");
+
     await window.screenshot({ path: join(screenshots, `home--${colorScheme}.png`) });
 
     await window.getByRole("link", { name: /Munkatársi bejelentkezés/ }).click();
     await window.waitForURL(`${appUrl}/staff/reports`);
     await window.getByRole("heading", { level: 1 }).waitFor();
     await window.screenshot({ path: join(screenshots, `staff-sign-in--${colorScheme}.png`) });
+
+    const staffMenu = await readMenu();
+    if (!staffMenu?.backEnabled)
+      throw new Error("Back must become enabled after SPA navigation to /staff/reports");
+    await clickMenu("nav-back");
+    await window.waitForURL(`${appUrl}/`);
+    const backMenu = await readMenu();
+    if (!backMenu?.forwardEnabled)
+      throw new Error("Forward must become enabled after navigating Back");
+    await clickMenu("nav-forward");
+    await window.waitForURL(`${appUrl}/staff/reports`);
+    await clickMenu("nav-home");
+    await window.waitForURL(`${appUrl}/`);
+
     await app.close();
     apps.pop();
   }
