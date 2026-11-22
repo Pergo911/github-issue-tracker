@@ -4,6 +4,14 @@
 const path = require("node:path");
 const { app, BrowserWindow, Menu, dialog, session, shell } = require("electron");
 const { resolveAppUrl } = require("./app-url.cjs");
+const {
+  MENU_IDS,
+  appCommandAction,
+  canNavigateHistory,
+  createApplicationMenuTemplate,
+  createContextMenuTemplate,
+  shortcutActionForInput,
+} = require("./menu.cjs");
 const { externalUrlToOpen, isAppUrl } = require("./navigation.cjs");
 const { webPreferences } = require("./web-preferences.cjs");
 
@@ -60,7 +68,136 @@ function unreachablePage(url) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
-/** @param {{ url: string }} target */
+/**
+ * Resolves a live BrowserWindow from a menu click target, the focused window, or the first open window.
+ * @param {import("electron").BaseWindow | undefined} candidate
+ * @returns {BrowserWindow | null}
+ */
+function resolveWindow(candidate) {
+  if (candidate instanceof BrowserWindow && !candidate.isDestroyed()) return candidate;
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && !focused.isDestroyed()) return focused;
+  return BrowserWindow.getAllWindows().find((win) => !win.isDestroyed()) ?? null;
+}
+
+/**
+ * @param {import("electron").BaseWindow | undefined} candidate
+ * @returns {import("electron").WebContents | null}
+ */
+function resolveWebContents(candidate) {
+  const win = resolveWindow(candidate);
+  return win && !win.webContents.isDestroyed() ? win.webContents : null;
+}
+
+/**
+ * @param {import("electron").WebContents} contents
+ * @param {string} appOrigin
+ */
+function goBack(contents, appOrigin) {
+  if (
+    !contents.isDestroyed() &&
+    canNavigateHistory(contents.navigationHistory, "back", appOrigin)
+  ) {
+    contents.navigationHistory.goBack();
+  }
+}
+
+/**
+ * @param {import("electron").WebContents} contents
+ * @param {string} appOrigin
+ */
+function goForward(contents, appOrigin) {
+  if (
+    !contents.isDestroyed() &&
+    canNavigateHistory(contents.navigationHistory, "forward", appOrigin)
+  ) {
+    contents.navigationHistory.goForward();
+  }
+}
+
+/**
+ * @param {import("electron").WebContents} contents
+ * @param {{ url: string }} target
+ */
+function goHome(contents, target) {
+  if (!contents.isDestroyed()) {
+    void contents.loadURL(target.url);
+  }
+}
+
+/**
+ * Reloads the current page, or returns to `target.url` if the window is showing the offline error page.
+ * @param {import("electron").WebContents} contents
+ * @param {{ url: string, origin: string }} target
+ * @param {boolean} ignoreCache
+ */
+function reloadPage(contents, target, ignoreCache) {
+  if (contents.isDestroyed()) return;
+  if (!isAppUrl(contents.getURL(), target.origin)) {
+    void contents.loadURL(target.url);
+    return;
+  }
+  if (ignoreCache) contents.reloadIgnoringCache();
+  else contents.reload();
+}
+
+/**
+ * Synchronizes Back and Forward menu item enabled state with `contents` history.
+ * @param {import("electron").WebContents | null} contents
+ * @param {string} appOrigin
+ */
+function syncNavigationMenu(contents, appOrigin) {
+  const menu = Menu.getApplicationMenu();
+  if (!menu) return;
+  const backItem = menu.getMenuItemById(MENU_IDS.back);
+  const forwardItem = menu.getMenuItemById(MENU_IDS.forward);
+  const liveContents = contents !== null && !contents.isDestroyed() ? contents : null;
+  if (backItem) {
+    backItem.enabled =
+      liveContents !== null &&
+      canNavigateHistory(liveContents.navigationHistory, "back", appOrigin);
+  }
+  if (forwardItem) {
+    forwardItem.enabled =
+      liveContents !== null &&
+      canNavigateHistory(liveContents.navigationHistory, "forward", appOrigin);
+  }
+}
+
+/**
+ * Installs the application menu for both packaged and unpackaged builds.
+ * @param {{ url: string, origin: string }} target
+ */
+function installApplicationMenu(target) {
+  const template = createApplicationMenuTemplate({
+    isPackaged: app.isPackaged,
+    actions: {
+      goBack: (win) => {
+        const contents = resolveWebContents(win);
+        if (contents) goBack(contents, target.origin);
+      },
+      goForward: (win) => {
+        const contents = resolveWebContents(win);
+        if (contents) goForward(contents, target.origin);
+      },
+      goHome: (win) => {
+        const contents = resolveWebContents(win);
+        if (contents) goHome(contents, target);
+      },
+      reload: (win) => {
+        const contents = resolveWebContents(win);
+        if (contents) reloadPage(contents, target, false);
+      },
+      forceReload: (win) => {
+        const contents = resolveWebContents(win);
+        if (contents) reloadPage(contents, target, true);
+      },
+    },
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/** @param {{ url: string, origin: string }} target */
 function openWindow(target) {
   const window = new BrowserWindow({
     width: 1280,
@@ -71,7 +208,68 @@ function openWindow(target) {
     show: false,
     webPreferences,
   });
+
+  const syncIfActive = () => {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+    const active = resolveWindow(undefined);
+    if (active !== null && active !== window) return;
+    syncNavigationMenu(window.webContents, target.origin);
+  };
+
   window.once("ready-to-show", () => window.show());
+  window.webContents.on("did-navigate", syncIfActive);
+  window.webContents.on("did-navigate-in-page", (_event, _url, isMainFrame) => {
+    if (isMainFrame) syncIfActive();
+  });
+  window.webContents.on("did-finish-load", syncIfActive);
+  window.on("focus", syncIfActive);
+  window.once("closed", () => {
+    syncNavigationMenu(resolveWebContents(undefined), target.origin);
+  });
+
+  window.webContents.on("before-input-event", (event, input) => {
+    const action = shortcutActionForInput(input);
+    if (!action || window.isDestroyed() || window.webContents.isDestroyed()) return;
+    event.preventDefault();
+    reloadPage(window.webContents, target, action === "force-reload");
+  });
+
+  window.on("app-command", (_event, command) => {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+    switch (appCommandAction(command)) {
+      case "back":
+        goBack(window.webContents, target.origin);
+        break;
+      case "forward":
+        goForward(window.webContents, target.origin);
+        break;
+      case "reload":
+        reloadPage(window.webContents, target, false);
+        break;
+      case "home":
+        goHome(window.webContents, target);
+        break;
+    }
+  });
+
+  window.webContents.on("context-menu", (_event, params) => {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+    const contents = window.webContents;
+    const template = createContextMenuTemplate({
+      canGoBack: canNavigateHistory(contents.navigationHistory, "back", target.origin),
+      canGoForward: canNavigateHistory(contents.navigationHistory, "forward", target.origin),
+      isEditable: params.isEditable,
+      selectionText: params.selectionText,
+      editFlags: params.editFlags,
+      actions: {
+        goBack: () => goBack(contents, target.origin),
+        goForward: () => goForward(contents, target.origin),
+        reload: () => reloadPage(contents, target, false),
+      },
+    });
+    Menu.buildFromTemplate(template).popup({ window });
+  });
+
   window.webContents.on("did-fail-load", (_event, code, _description, failedUrl, isMainFrame) => {
     // -3 is a navigation that was cancelled (a blocked one, a click during a load), not a failure.
     if (isMainFrame && code !== -3 && !failedUrl.startsWith("data:")) {
@@ -97,7 +295,7 @@ void app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
     callback(false),
   );
-  if (app.isPackaged) Menu.setApplicationMenu(null);
+  installApplicationMenu(target);
   guardNavigation(target.origin);
   openWindow(target);
 
