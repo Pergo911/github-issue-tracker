@@ -1,7 +1,8 @@
 name: verify
 
 # The definition of done (AGENTS.md): the full verification loop, split into five parallel jobs on free
-# ubuntu-latest runners (1 fast + 2 e2e shards + 2 visual shards). Visual checks run directly inside
+# ubuntu-latest runners (1 fast + 2 e2e shards + 2 visual shards), rolled up into a single `verify`
+# status check required by the Main protection ruleset. Visual checks run directly inside
 # Playwright's official container image — the same image developers use locally via Docker — so pixels agree
 # without nested Docker or a WebSocket tunnel.
 on:
@@ -11,20 +12,53 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "shell/**"
-      - ".agents/**"
-      - ".claude/**"
 
 concurrency:
   group: verify-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_app: ${{ steps.filter.outputs.run_app }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - name: Check whether app verification is needed
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run_app=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA"...HEAD)
+          echo "Changed files:"
+          echo "$changed"
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              docs/*|shell/*|website/*|.agents/*|.claude/*|.github/workflows/docs.yml|*.md) ;;
+              *)
+                echo "run_app=true" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+          done <<< "$changed"
+          echo "run_app=false" >> "$GITHUB_OUTPUT"
+
   fast:
     name: fast
+    needs: changes
+    if: needs.changes.outputs.run_app == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -67,6 +101,8 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.shard }}/2)
+    needs: changes
+    if: needs.changes.outputs.run_app == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -128,6 +164,8 @@ jobs:
 
   visual:
     name: visual (${{ matrix.shard }}/2)
+    needs: changes
+    if: needs.changes.outputs.run_app == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -172,3 +210,34 @@ jobs:
           path: app/.screenshots/diffs
           if-no-files-found: ignore
           retention-days: 7
+
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, fast, e2e, visual]
+    if: always()
+    steps:
+      - name: Check required verification results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_APP: ${{ needs.changes.outputs.run_app }}
+          FAST_RESULT: ${{ needs.fast.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          VISUAL_RESULT: ${{ needs.visual.result }}
+        run: |
+          echo "changes=$CHANGES_RESULT run_app=$RUN_APP fast=$FAST_RESULT e2e=$E2E_RESULT visual=$VISUAL_RESULT"
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "changes job did not succeed: $CHANGES_RESULT"
+            exit 1
+          fi
+          if [ "$RUN_APP" != "true" ]; then
+            echo "Only non-app paths changed; app verification skipped."
+            exit 0
+          fi
+          for pair in "fast=$FAST_RESULT" "e2e=$E2E_RESULT" "visual=$VISUAL_RESULT"; do
+            if [ "${pair#*=}" != "success" ]; then
+              echo "Required job failed: $pair"
+              exit 1
+            fi
+          done

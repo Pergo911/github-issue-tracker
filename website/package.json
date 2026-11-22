@@ -1,0 +1,25 @@
+{
+  "name": "fault-reports-docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Accompanying bilingual (EN + HU) VitePress documentation site for Issue Tracker.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "allowScripts": {
+    "esbuild": true
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitepress": "1.6.4",
+    "vue": "3.5.46"
+  }
+}
